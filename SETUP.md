@@ -27,7 +27,7 @@ docker run \
   -u root \
   -e HOST_USER_ID=$(id -u) \
   -e HOST_GROUP_ID=$(id -g) \
-  -v $HOME/.cache:/home/cosmos/.cache \
+  -v /Data/lzl/huggingface:/home/cosmos/.cache \
   -v $(pwd):/workspace \
   --gpus all \
   --ipc=host \

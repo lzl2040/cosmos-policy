@@ -41,7 +41,7 @@ BASE_DATASETS_DIR = os.environ.get("BASE_DATASETS_DIR", ".")
 libero_all_4_suites_dataset = L(LIBERODataset)(
     data_dir=os.path.join(BASE_DATASETS_DIR, "Libero_data", "Libero_data", "success_only"),  # Successful demos
     t5_text_embeddings_path=os.path.join(
-        BASE_DATASETS_DIR, "LIBERO-Cosmos-Policy", "success_only", "t5_embeddings.pkl"
+        BASE_DATASETS_DIR, "Libero_data", "Libero_data", "success_only", "t5_embeddings.pkl"
     ),
     chunk_size=16,
     use_image_aug=True,
@@ -52,7 +52,7 @@ libero_all_4_suites_dataset = L(LIBERODataset)(
     num_duplicates_per_image=4,  # WAN 2.1 tokenizer: 4 images per latent frame
     use_stronger_image_aug=True,
     rollout_data_dir=os.path.join(
-        BASE_DATASETS_DIR, "LIBERO-Cosmos-Policy", "all_episodes"
+        BASE_DATASETS_DIR, "Libero_data", "Libero_data", "all_episodes"
     ),  # All demo rollouts (successes + failures)
     demonstration_sampling_prob=0.5,
     success_rollout_sampling_prob=0.5,

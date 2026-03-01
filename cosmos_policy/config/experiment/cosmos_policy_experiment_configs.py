@@ -175,7 +175,7 @@ cosmos_predict2_2b_480p_libero = LazyDict(
         job=dict(
             group="cosmos_v2_finetune",
             name="cosmos_predict2_2b_480p_libero",
-            path_local="/mnt/out/cosmos_policy/experiments/cosmos_predict2_2b_480p_libero",
+            # path_local="/mnt/out/cosmos_policy/experiments/cosmos_predict2_2b_480p_libero",
         ),
         upload_reproducible_setup=False,
     )

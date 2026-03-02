@@ -38,6 +38,8 @@ from cosmos_policy._src.imaginaire.utils.launch import log_reproducible_setup
 
 @logging.catch(reraise=True)
 def launch(config: Config, args: argparse.Namespace) -> None:
+    os.environ['WANDB_API_KEY'] = '9e1c3ac77856b8ebb5573c4e1e250c84aabfb904'
+    config.job.name = args.job_name if args.job_name is not None else config.job.name
     # Need to initialize the distributed environment before calling config.validate() because it tries to synchronize
     # a buffer across ranks. If you don't do this, then you end up allocating a bunch of buffers on rank 0, and also that
     # check doesn't actually do anything.
@@ -131,6 +133,11 @@ For python-based LazyConfig, use "path.key=value".
         "--dryrun",
         action="store_true",
         help="Do a dry run without training. Useful for debugging the config.",
+    )
+    parser.add_argument(
+        "--job_name",
+        default=None,
+        help="Job Name.",
     )
     args = parser.parse_args()
 

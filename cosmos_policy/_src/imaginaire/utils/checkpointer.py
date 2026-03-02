@@ -51,12 +51,12 @@ class Checkpointer:
         """
         # Set the callback functions.
         self.callbacks = callbacks
-        path_local = "/mnt/out/cosmos_policy/experiments/cosmos_predict2_2b_480p_libero"
-        self.checkpoint_dir_local = f"{path_local}/checkpoints"
-        os.makedirs(self.checkpoint_dir_local, exist_ok=True)
-        path = "/mnt/out/cosmos_policy/experiments/cosmos_predict2_2b_480p_libero_obj"
-        self.checkpoint_dir_object_store = f"{path}/checkpoints"
-        os.makedirs(self.checkpoint_dir_object_store, exist_ok=True)
+        # path_local = "/mnt/out/cosmos_policy/experiments/cosmos_predict2_2b_480p_libero"
+        self.checkpoint_dir_local = f"{config_job.path_local}/checkpoints"
+        # os.makedirs(self.checkpoint_dir_local, exist_ok=True)
+        # path = "/mnt/out/cosmos_policy/experiments/cosmos_predict2_2b_480p_libero_obj"
+        self.checkpoint_dir_object_store = f"{config_job.path}/checkpoints"
+        # os.makedirs(self.checkpoint_dir_object_store, exist_ok=True)
         self.save_to_object_store = config_checkpoint.save_to_object_store.enabled
         self.load_from_object_store = config_checkpoint.load_from_object_store.enabled
         self.strict_resume = config_checkpoint.strict_resume

@@ -507,6 +507,8 @@ class LIBERODataset(Dataset):
         return self.epoch_length
 
     def decode_frames(self, file_path, demo_key):
+        file_path = file_path.split("all_episodes")[-1]
+        file_path = os.path.join(self.rollout_data_dir, file_path)
         with h5py.File(file_path, "r") as f:
             # Determine whether the dataset stores raw RGB frames or JPEG bytes
             obs_group = f[f"data/{demo_key}/obs"]

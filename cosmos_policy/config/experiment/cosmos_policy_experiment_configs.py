@@ -23,7 +23,7 @@ from cosmos_policy._src.imaginaire.lazy_config import LazyDict
 from cosmos_policy._src.imaginaire.utils import log
 from cosmos_policy._src.imaginaire.utils.checkpoint_db import get_checkpoint_path  # noqa: F401
 from cosmos_policy.datasets.aloha_dataset import ALOHADataset
-from cosmos_policy.datasets.libero_dataset import LIBERODataset
+from cosmos_policy.datasets.libero_dataset_v2 import LIBERODataset
 from cosmos_policy.datasets.robocasa_dataset import RoboCasaDataset
 from cosmos_policy.models.policy_video2world_model import CosmosPolicyVideo2WorldModel
 from cosmos_policy.modules.hybrid_edm_sde import HybridEDMSDE

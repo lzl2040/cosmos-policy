@@ -462,7 +462,9 @@ class LIBERODataset(Dataset):
             dict: Episode data dictionary with loaded arrays
         """
         file_path = episode_metadata["file_path"]
+        print(f"File path:{file_path}")
         file_path = file_path.split("all_episodes")[-1]
+        print(f"Roll out:{self.rollout_data_dir}")
         file_path = os.path.join(self.rollout_data_dir, file_path)
 
         with h5py.File(file_path, "r") as f:

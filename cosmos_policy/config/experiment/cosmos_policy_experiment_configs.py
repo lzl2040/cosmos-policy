@@ -169,7 +169,7 @@ cosmos_predict2_2b_480p_libero = LazyDict(
                 shuffle=True,
                 seed=0,
             ),
-            batch_size=16,
+            batch_size=4,
             drop_last=True,
         ),
         job=dict(

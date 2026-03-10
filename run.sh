@@ -48,4 +48,4 @@ uv run --no-sync --extra cu128 --group libero --python 3.10 \
   --config=cosmos_policy/config/config.py --job_name=$JOB_NAME -- \
   experiment="cosmos_predict2_2b_480p_libero" \
   trainer.grad_accum_iter=8 \
-  dataloader.batch_size=$BATCH_SIZE
+  dataloader_train.batch_size=$BATCH_SIZE

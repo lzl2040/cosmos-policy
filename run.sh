@@ -39,7 +39,7 @@ while [[ $# -gt 0 ]]; do
             ;;
     esac
 done
-
+export PATH=$PWD/ffmpeg-*/:$PATH
 # export BASE_DATASETS_DIR="/home/cosmos/.cache/datasets"
 # export IMAGINAIRE_OUTPUT_ROOT="/home/cosmos/.cache/imaginaire_output"
 uv run --no-sync --extra cu128 --group libero --python 3.10 \

@@ -39,8 +39,9 @@ while [[ $# -gt 0 ]]; do
             ;;
     esac
 done
-# export PATH=$(pwd)/ffmpeg-6.0.1-amd64-static:$PATH
-# ffmpeg
+export PATH=/home/aiscuser/.conda/envs/lerobot/bin:$PATH
+export LD_LIBRARY_PATH=/home/aiscuser/.conda/envs/lerobot/lib:$LD_LIBRARY_PATH
+ffmpeg
 uv run --no-sync --extra cu128 --group libero --python 3.10 \
     python test_ffmpeg.py
 # export BASE_DATASETS_DIR="/home/cosmos/.cache/datasets"

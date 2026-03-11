@@ -39,7 +39,7 @@ while [[ $# -gt 0 ]]; do
             ;;
     esac
 done
-export PATH=$PWD/ffmpeg-*/:$PATH
+export PATH=$(pwd)/ffmpeg-6.0.1-amd64-static:$PATH
 ffmpeg
 # export BASE_DATASETS_DIR="/home/cosmos/.cache/datasets"
 # export IMAGINAIRE_OUTPUT_ROOT="/home/cosmos/.cache/imaginaire_output"

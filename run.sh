@@ -41,6 +41,8 @@ while [[ $# -gt 0 ]]; do
 done
 export PATH=$(pwd)/ffmpeg-6.0.1-amd64-static:$PATH
 ffmpeg
+uv run --no-sync --extra cu128 --group libero --python 3.10 \
+    python test_ffmpeg.py
 # export BASE_DATASETS_DIR="/home/cosmos/.cache/datasets"
 # export IMAGINAIRE_OUTPUT_ROOT="/home/cosmos/.cache/imaginaire_output"
 uv run --no-sync --extra cu128 --group libero --python 3.10 \

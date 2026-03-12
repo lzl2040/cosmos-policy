@@ -31,6 +31,10 @@ from PIL import Image
 import importlib
 from threading import Lock
 import fsspec
+from torchcodec.decoders import VideoDecoder
+import math
+from typing import List
+from concurrent.futures import ThreadPoolExecutor
 
 
 class VideoDecoderCache:
@@ -90,7 +94,8 @@ def decode_video_frames(
     timestamps: list[float],
     tolerance_s: float,
     backend: str | None = None,
-    return_type: str = None
+    return_type: str = None,
+    worker_count = 1
 ) -> torch.Tensor:
     """
     Decodes video frames using the specified backend.
@@ -109,11 +114,39 @@ def decode_video_frames(
     if backend is None:
         backend = get_safe_default_codec()
     if backend == "torchcodec":
-        return decode_video_frames_torchcodec(video_path, timestamps, tolerance_s, return_type=return_type)
+        return decode_video_frames_torchcodec(video_path, timestamps, tolerance_s, return_type=return_type, worker_count=worker_count)
     elif backend in ["pyav", "video_reader"]:
         return decode_video_frames_torchvision(video_path, timestamps, tolerance_s, backend)
     else:
         raise ValueError(f"Unsupported video backend: {backend}")
+
+def split_indices(indices: List[int], num_chunks: int) -> List[List[int]]:
+    """Split a list of indices into approximately equal chunks."""
+    chunk_size = len(indices) // num_chunks
+    chunks = []
+
+    for i in range(num_chunks - 1):
+        chunks.append(indices[i * chunk_size:(i + 1) * chunk_size])
+
+    # Last chunk may be slightly larger
+    chunks.append(indices[(num_chunks - 1) * chunk_size:])
+    return chunks
+
+def convert_to_giventype(data: torch.Tensor, type: int = 1):
+    npimg = data.cpu().numpy()
+    # print(npimg.shape)
+    if npimg.shape[0] in (1, 3, 4):
+        npimg = np.transpose(npimg, (1, 2, 0))
+    return Image.fromarray(npimg) if type else npimg
+
+def decode_frame_torchcodec(
+    raw_bytes: bytes,
+    indices: List[int],
+): 
+    decoder = VideoDecoder(raw_bytes, seek_mode="approximate")
+    frames = decoder.get_frames_at(indices)
+    return frames
+
 
 _default_decoder_cache = VideoDecoderCache()
 
@@ -123,7 +156,8 @@ def decode_video_frames_torchcodec(
     tolerance_s: float,
     log_loaded_timestamps: bool = False,
     decoder_cache: VideoDecoderCache | None = None,
-    return_type: str = "numpy"
+    return_type: str = "numpy",
+    worker_count = 1
 ) -> torch.Tensor:
     """Loads frames associated with the requested timestamps of a video using torchcodec.
 
@@ -145,8 +179,12 @@ def decode_video_frames_torchcodec(
     if decoder_cache is None:
         decoder_cache = _default_decoder_cache
 
+    # with open(str(video_path), "rb") as f:
+    #     raw_bytes = f.read()
+    
     # Use cached decoder instead of creating new one each time
     decoder = decoder_cache.get_decoder(str(video_path))
+    # decoder = VideoDecoder(raw_bytes, seek_mode="approximate")
 
     loaded_ts = []
     loaded_frames = []
@@ -155,7 +193,9 @@ def decode_video_frames_torchcodec(
     metadata = decoder.metadata
     average_fps = metadata.average_fps
     # convert timestamps to frame indices
+    # timestamps = [timestamps[0], timestamps[-1]]
     frame_indices = [round(ts * average_fps) for ts in timestamps]
+    # frame_indices = [frame_indices[0], frame_indices[-1]]
     # retrieve frames based on indices
     frames_batch = decoder.get_frames_at(indices=frame_indices)
 
@@ -201,11 +241,26 @@ def decode_video_frames_torchcodec(
             f"Retrieved timestamps differ from queried {set(closest_frames) - set(timestamps)}"
         )
     
+    # if worker_count == 1:
+    #     frames = decoder.get_frames_at(frame_indices)
+    #     loaded_frames = frames.data
+    # else:
+    #     chunks = split_indices(frame_indices, num_chunks=worker_count)
+    #     results = []
+    #     with ThreadPoolExecutor(max_workers=worker_count) as executor:
+    #         futures = [
+    #             executor.submit(decode_frame_torchcodec, raw_bytes, chunk) 
+    #             for chunk in chunks
+    #         ]
+    #         for f in futures:
+    #             results.append(f.result())
+    #         loaded_frames = torch.cat([frame_batch.data for frame_batch in results], dim=0)
+    
     if return_type == "tensor":
         if log_loaded_timestamps:
             logging.info(f"{loaded_ts=}")
         
-        return closest_frames
+        return loaded_frames
     elif return_type == "image":
         image_list = []
         for idx in range(len(loaded_frames)):

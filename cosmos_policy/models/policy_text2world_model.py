@@ -261,7 +261,8 @@ class CosmosPolicyDiffusionModel(BaseDiffusionModel):
             text_embeddings = self.text_encoder.compute_text_embeddings_online(data_batch, self.input_caption_key)
             data_batch["t5_text_embeddings"] = text_embeddings
             data_batch["t5_text_mask"] = torch.ones(text_embeddings.shape[0], text_embeddings.shape[1], device="cuda")
-
+        # print(data_batch["t5_text_embeddings"].shape) # 4 1 512 hidden_size
+        # print(data_batch["proprio"].shape, data_batch["future_proprio"].shape) # torch.Size([4, 9]) torch.Size([4, 9])
         # Get the input data to noise and denoise~(image, video) and the corresponding conditioner.
         _, x0_B_C_T_H_W, condition = self.get_data_and_condition(data_batch)
 
@@ -398,15 +399,17 @@ class CosmosPolicyDiffusionModel(BaseDiffusionModel):
                 proprio_indices=future_proprio_indices,
             )
         # Value
-        x0_B_C_T_H_W[batch_indices, :, value_indices, :, :] = (
-            value_function_return.reshape(-1, 1, 1, 1).expand(-1, C_latent, H_latent, W_latent).to(x0_B_C_T_H_W.dtype)
-        )
+        # x0_B_C_T_H_W[batch_indices, :, value_indices, :, :] = (
+        #     value_function_return.reshape(-1, 1, 1, 1).expand(-1, C_latent, H_latent, W_latent).to(x0_B_C_T_H_W.dtype)
+        # )
 
         # Get the mean and stand deviation of the marginal probability distribution.
         mean_B_C_T_H_W, std_B_T = self.sde.marginal_prob(x0_B_C_T_H_W, sigma_B_T)
         # Generate noisy observations
         xt_B_C_T_H_W = mean_B_C_T_H_W + epsilon_B_C_T_H_W * rearrange(std_B_T, "b t -> b 1 t 1 1")
         # make prediction
+        # xt_B_C_T_H_W = torch.zeros_like(xt_B_C_T_H_W).to(device=x0_B_C_T_H_W.device, dtype=x0_B_C_T_H_W.dtype)
+        # sigma_B_T = torch.zeros_like(sigma_B_T).to(device=x0_B_C_T_H_W.device, dtype=x0_B_C_T_H_W.dtype)
         model_pred = self.denoise(xt_B_C_T_H_W, sigma_B_T, condition)
         # loss weights for different noise levels
         weights_per_sigma_B_T = self.get_per_sigma_loss_weights(sigma=sigma_B_T)
@@ -415,6 +418,8 @@ class CosmosPolicyDiffusionModel(BaseDiffusionModel):
         B, T = x0_B_C_T_H_W.shape[0], x0_B_C_T_H_W.shape[2]
         final_mask_B_T = torch.ones((B, T), dtype=torch.long, device=sigma_B_T.device)  # All 1s mask initially
 
+        # print(self.config.mask_current_state_action_for_value_prediction, self.config.mask_future_state_for_qvalue_prediction, 
+        #       self.config.mask_loss_for_action_future_state_prediction, self.config.mask_value_prediction_loss_for_policy_prediction)
         # If using input masking for value prediction, mask out the loss for everything except the value prediction
         # This is necessary since otherwise the loss will be computed for all latent frames, not just the value prediction frame
         if (

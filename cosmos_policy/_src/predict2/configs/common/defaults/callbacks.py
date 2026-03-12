@@ -38,11 +38,11 @@ BASIC_CALLBACKS = dict(
         update_interval_in_minute=20,
         save_s3="${upload_reproducible_setup}",
     ),
-    device_monitor=L(DeviceMonitor)(
-        every_n="${trainer.logging_iter}",
-        save_s3="${upload_reproducible_setup}",
-        upload_every_n_mul=10,
-    ),
+    # device_monitor=L(DeviceMonitor)(
+    #     every_n="${trainer.logging_iter}",
+    #     save_s3="${upload_reproducible_setup}",
+    #     upload_every_n_mul=10,
+    # ),
     manual_gc=L(ManualGarbageCollection)(every_n=5),
     compile_tokenizer=L(CompileTokenizer)(
         enabled=True,

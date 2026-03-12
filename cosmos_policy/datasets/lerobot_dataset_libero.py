@@ -829,7 +829,8 @@ class LeRobotDataset(torch.utils.data.Dataset):
             # frames = decode_video_frames_torchvision(
             #     video_path, query_ts, self.tolerance_s, self.video_backend
             # )
-            frames = decode_video_frames(video_path, query_ts, self.tolerance_s, self.video_backend, return_type="numpy")
+            frames = decode_video_frames(video_path, query_ts, self.tolerance_s, self.video_backend, 
+                                         return_type="numpy", worker_count=10)
             # print(vid_key, frames.shape)
             item[vid_key] = frames
 
@@ -1530,11 +1531,11 @@ class MultiDatasetforDistTraining(torch.utils.data.Dataset):
             current_image_latent_idx = current_sequence_idx
             current_sequence_idx += 1
             
-            # current_secondary_image = item[IMAGE_SECOND][CURRENT_IDX]
-            # current_secondary_image = duplicate_array(current_secondary_image, total_num_copies=self.num_duplicates_per_image)
-            # image_list.append(current_secondary_image)
-            # current_image2_latent_idx = current_sequence_idx
-            # current_sequence_idx += 1
+            current_secondary_image = item[IMAGE_SECOND][CURRENT_IDX]
+            current_secondary_image = duplicate_array(current_secondary_image, total_num_copies=self.num_duplicates_per_image)
+            image_list.append(current_secondary_image)
+            current_image2_latent_idx = current_sequence_idx
+            current_sequence_idx += 1
             
         # Add blank image for action chunk
         blank_image = np.zeros_like(item[IMAGE_PRIMARY][CURRENT_IDX])
@@ -1573,11 +1574,11 @@ class MultiDatasetforDistTraining(torch.utils.data.Dataset):
             future_image_latent_idx = current_sequence_idx
             current_sequence_idx += 1
             
-            # future_secondary_image = item[IMAGE_SECOND][FUTURE_IDX]
-            # future_secondary_image = duplicate_array(future_secondary_image, total_num_copies=self.num_duplicates_per_image)
-            # image_list.append(future_secondary_image)
-            # future_image2_latent_idx = current_sequence_idx
-            # current_sequence_idx += 1
+            future_secondary_image = item[IMAGE_SECOND][FUTURE_IDX]
+            future_secondary_image = duplicate_array(future_secondary_image, total_num_copies=self.num_duplicates_per_image)
+            image_list.append(future_secondary_image)
+            future_image2_latent_idx = current_sequence_idx
+            current_sequence_idx += 1
         
         # Stack images and preprocess
         images = np.concatenate(image_list, axis=0)
@@ -1587,6 +1588,7 @@ class MultiDatasetforDistTraining(torch.utils.data.Dataset):
             final_image_size=self.final_image_size,
             normalize_images=self.normalize_images,
             use_image_aug=self.use_image_aug,
+            # use_image_aug=False,
             stronger_image_aug=self.use_stronger_image_aug,
         )
         # print(images.shape) # torch.Size([37, 3, 256, 256])
@@ -1610,7 +1612,7 @@ class MultiDatasetforDistTraining(torch.utils.data.Dataset):
             "future_proprio": future_proprio if self.use_proprio else torch.zeros_like(item[OBS_ROBOT][FUTURE_IDX]),
             "__key__": index,  # Unique sample identifier (required for callbacks)
             
-            "rollout_data_mask": 1,
+            "rollout_data_mask": 0, # demonstration data
             "rollout_data_success_mask": 1,
             "world_model_sample_mask": 0,
             "value_function_sample_mask": 0,
@@ -1620,11 +1622,11 @@ class MultiDatasetforDistTraining(torch.utils.data.Dataset):
             "current_proprio_latent_idx": current_proprio_latent_idx if self.use_proprio else -1,
             "current_wrist_image_latent_idx": current_wrist_image_latent_idx if self.use_wrist_images else -1,
             "current_image_latent_idx": current_image_latent_idx if self.use_third_person_images else -1,
-            # "current_image2_latent_idx": current_image2_latent_idx if self.use_third_person_images else -1,
+            "current_image2_latent_idx": current_image2_latent_idx if self.use_third_person_images else -1,
             "future_proprio_latent_idx": future_proprio_latent_idx if self.use_proprio else -1,
             "future_wrist_image_latent_idx": future_wrist_image_latent_idx if self.use_wrist_images else -1,
             "future_image_latent_idx": future_image_latent_idx if self.use_third_person_images else -1,
-            # "future_image2_latent_idx": future_image2_latent_idx if self.use_third_person_images else -1,
+            "future_image2_latent_idx": future_image2_latent_idx if self.use_third_person_images else -1,
             "value_function_return": float("-100"),
             # "next_action_chunk": next_action_chunk,
             # "next_value_function_return": next_value_function_return,

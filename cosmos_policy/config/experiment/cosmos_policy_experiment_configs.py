@@ -79,7 +79,7 @@ cosmos_predict2_2b_480p_libero = LazyDict(
             {"override /tokenizer": "policy_wan2pt1_tokenizer"},
             {
                 "override /callbacks": [
-                    "basic",
+                    "basic", # contains device_monitor
                     "long",
                     "cluster_speed",
                     "wandb",
@@ -125,9 +125,9 @@ cosmos_predict2_2b_480p_libero = LazyDict(
                     ),
                 ),
                 # state_t=9,  # Latent temporal dim (blank, proprio, wrist, primary, action, future proprio, future wrist, future primary, value)
-                state_t = 8,
-                min_num_conditional_frames=4,  # 1 blank, 3 conditioning (proprio, wrist, primary)
-                max_num_conditional_frames=4,  # 1 blank, 3 conditioning (proprio, wrist, primary)
+                state_t = 10,
+                min_num_conditional_frames=5,  # 1 blank, 3 conditioning (proprio, wrist, primary)
+                max_num_conditional_frames=5,  # 1 blank, 3 conditioning (proprio, wrist, primary)
                 sigma_conditional=0.0,  # No noise on conditional latents
                 conditioning_strategy="frame_replace",
                 denoise_replace_gt_frames=True,
@@ -136,7 +136,7 @@ cosmos_predict2_2b_480p_libero = LazyDict(
                 # ),
                 
                 tokenizer=dict(
-                    chunk_duration=29,  # 1 blank + 32 images (4 proprio, 4 wrist image, 4 primary image, 4 action, 4 future proprio, 4 future wrist, 4 future primary, 4 value)
+                    chunk_duration=37,  # 1 blank + 36 images (4 proprio, 4 wrist image, 4 primary image, 4 secondary, 4 action, 4 future proprio, 4 future wrist, 4 future primary, 4 future secondary)
                 ),
                 ema=dict(
                     enabled=False,
@@ -185,7 +185,7 @@ cosmos_predict2_2b_480p_libero = LazyDict(
                 shuffle=True,
                 seed=0,
             ),
-            batch_size=4,
+            batch_size=8,
             drop_last=True,
         ),
         job=dict(

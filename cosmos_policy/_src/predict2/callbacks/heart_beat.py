@@ -64,6 +64,7 @@ class HeartBeat(EveryN):
         output_batch: dict[str, torch.Tensor],
         loss: torch.Tensor,
         iteration: int = 0,
+        dataloader_len: int = 1
     ) -> None:
         if not self.is_hitted:
             self.is_hitted = True
@@ -80,6 +81,7 @@ class HeartBeat(EveryN):
         output_batch: dict[str, torch.Tensor],
         loss: torch.Tensor,
         iteration: int,
+        dataloader_len: int
     ) -> None:
         if time.time() - self.time > 60 * self.update_interval_in_minute:
             self.report(iteration)

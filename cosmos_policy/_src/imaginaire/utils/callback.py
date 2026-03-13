@@ -222,6 +222,7 @@ class Callback:
         output_batch: dict[str, torch.Tensor],
         loss: torch.Tensor,
         iteration: int = 0,
+        dataloader_len: int = 0
     ) -> None:
         """
         Called at the end of a training step, but note that when using gradient accumulation, this is only called

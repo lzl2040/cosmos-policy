@@ -57,6 +57,7 @@ class DetailedDataLoadingSpeedMonitor(Callback):
         output_batch: dict[str, torch.Tensor],
         loss: torch.Tensor,
         iteration: int = 0,
+        dataloader_len: int = 0
     ) -> None:
         if self.should_run:
             self.should_run = False

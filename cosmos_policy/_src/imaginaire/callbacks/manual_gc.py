@@ -37,7 +37,7 @@ class ManualGarbageCollection(EveryN):
         self.counter = 0
         self.warm = warm_up
 
-    def every_n_impl(self, trainer, model, data_batch, output_batch, loss, iteration):
+    def every_n_impl(self, trainer, model, data_batch, output_batch, loss, iteration, dataloader_len):
         del trainer, model, data_batch, output_batch, loss
         self.counter += 1
         if self.counter < self.warm:

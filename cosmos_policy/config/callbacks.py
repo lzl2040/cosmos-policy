@@ -123,6 +123,7 @@ class WandbCallback(WandBCallbackImage):
         output_batch: dict[str, torch.Tensor],
         loss: torch.Tensor,
         iteration: int = 0,
+        dataloader_len: int = 0
     ) -> None:
         skip_update_due_to_unstable_loss = False
         if torch.isnan(loss) or torch.isinf(loss):

@@ -52,6 +52,7 @@ class IterSpeed(EveryN):
         output_batch: dict[str, torch.Tensor],
         loss: torch.Tensor,
         iteration: int = 0,
+        dataloader_len: int = 0
     ) -> None:
         if self.hit_counter < self.hit_thres:
             log.info(
@@ -65,7 +66,7 @@ class IterSpeed(EveryN):
             #! useful for large scale training and avoid oom crash in the first two iterations!!!
             torch.cuda.synchronize()
             return
-        super().on_training_step_end(model, data_batch, output_batch, loss, iteration)
+        super().on_training_step_end(model, data_batch, output_batch, loss, iteration, dataloader_len)
 
     @rank0_only
     def every_n_impl(
@@ -76,6 +77,7 @@ class IterSpeed(EveryN):
         output_batch: dict[str, Tensor],
         loss: Tensor,
         iteration: int,
+        dataloader_len: int
     ) -> None:
         if self.time is None:
             self.time = time.time()
@@ -83,7 +85,7 @@ class IterSpeed(EveryN):
         cur_time = time.time()
         iter_speed = (cur_time - self.time) / self.every_n / self.step_size
 
-        log.info(f"{iteration} : iter_speed {iter_speed:.2f} seconds per iteration | Loss: {loss.item():.4f}")
+        log.info(f"Epoch:{iteration / dataloader_len}, Iteration {iteration} : iter_speed {iter_speed:.2f} seconds per iteration | Loss: {loss.item():.4f}")
 
         if wandb.run:
             sample_counter = getattr(trainer, "sample_counter", iteration)

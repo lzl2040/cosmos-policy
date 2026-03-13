@@ -57,6 +57,7 @@ class EveryN(Callback):
         output_batch: dict[str, torch.Tensor],
         loss: torch.Tensor,
         iteration: int = 0,
+        dataloader_len: int = 1
     ) -> None:
         # every_n = 0 is a special case which means every_n_impl will be called only once in the beginning of the training
         if self.every_n != 0:
@@ -67,7 +68,7 @@ class EveryN(Callback):
             )  # (self.every_n - 1)
             if should_run:
                 log.debug(f"Callback {self.__class__.__name__} fired on train_batch_end step {global_step}")
-                self.every_n_impl(trainer, model, data_batch, output_batch, loss, iteration)
+                self.every_n_impl(trainer, model, data_batch, output_batch, loss, iteration, dataloader_len)
                 log.debug(f"Callback {self.__class__.__name__} finished on train_batch_end step {global_step}")
                 # add necessary barrier to avoid timeout
                 if self.barrier_after_run:

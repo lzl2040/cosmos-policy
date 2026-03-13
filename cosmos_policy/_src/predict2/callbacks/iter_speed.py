@@ -85,7 +85,7 @@ class IterSpeed(EveryN):
         cur_time = time.time()
         iter_speed = (cur_time - self.time) / self.every_n / self.step_size
 
-        log.info(f"Epoch:{iteration / dataloader_len}, Iteration {iteration} : iter_speed {iter_speed:.2f} seconds per iteration | Loss: {loss.item():.4f}")
+        log.info(f"Epoch:{iteration / dataloader_len:.4f}, Iteration {iteration} : iter_speed {iter_speed:.2f} seconds per iteration | Loss: {loss.item():.4f}")
 
         if wandb.run:
             sample_counter = getattr(trainer, "sample_counter", iteration)

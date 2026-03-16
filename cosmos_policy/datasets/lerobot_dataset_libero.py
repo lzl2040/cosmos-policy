@@ -1313,10 +1313,12 @@ class MultiDatasetforDistTraining(torch.utils.data.Dataset):
         # in fact, we do not use it, so just simply copy
         self.meta = ds_meta
         
-        t5_text_embeddings_path = os.path.join(parent_dir, "t5_embeddings.pkl")
+        if self.stage == "finetune":
+            t5_text_embeddings_path = os.path.join(parent_dir, f"t5_embeddings_{data_mix}.pkl")
+        else:
+            t5_text_embeddings_path = os.path.join(parent_dir, f"t5_embeddings_pretrain.pkl")
         with open(t5_text_embeddings_path, "rb") as file:
             self.t5_text_embeddings = pickle.load(file)
-        
         
         # other property
         self.use_proprio = use_proprio
@@ -1399,11 +1401,11 @@ class MultiDatasetforDistTraining(torch.utils.data.Dataset):
             new_action[:, 6:6 + 1] = item["action"][:, -2:-1]
             # force data
             new_action[:, 44:44 + 6] = item["action"][:, 6:6 + 6]
-            new_state = torch.ones(self.max_state_dim)
-            new_state[:7] = item["observation.state"][:7]
-            new_state[7:7 + 1] = item["observation.state"][-2:-1]
+            new_state = torch.ones((chunk_len, self.max_state_dim))
+            new_state[:, :7] = item["observation.state"][:, :7]
+            new_state[:, 7:7 + 1] = item["observation.state"][:, -2:-1]
             # force data
-            new_state[46:46 + 6] = item["observation.state"][7:7 + 6]
+            new_state[:, 46:46 + 6] = item["observation.state"][:, 7:7 + 6]
             item["action"] = new_action
             item["observation.state"] = new_state
         
@@ -1595,6 +1597,7 @@ class MultiDatasetforDistTraining(torch.utils.data.Dataset):
         action_chunk = item["action"] # pad with last action
         # print(images.shape, action_chunk.shape, proprio.shape, future_proprio.shape) # torch.Size([3, 37, 224, 224]) torch.Size([16, 32]) torch.Size([32]) torch.Size([32])
         # print(self.t5_text_embeddings.keys(), item["task"])
+        # print(self.t5_text_embeddings[item["task"]].shape) # 1 512 1024
         sample_dict = {
             "video": images,
             "actions": action_chunk,

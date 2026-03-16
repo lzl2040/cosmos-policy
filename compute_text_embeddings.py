@@ -79,8 +79,8 @@ if text_model_type == "t5":
                 encoded_text = encoded_text.cpu().numpy().astype(np.float16)
                 # text_embeddings[start:end] = encoded_text
                 text_embeddings.append(encoded_text)
-                if len(text_embeddings) > 10:
-                    break
+                # if len(text_embeddings) > 10:
+                #     break
                 # print(encoded_text.shape)
             text_embeddings_dict[d_name] = text_embeddings
             break

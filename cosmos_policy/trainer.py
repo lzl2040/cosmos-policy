@@ -78,6 +78,7 @@ class CosmosPolicyTrainer(ImaginaireTrainer):
             raise ValueError(f"Unknown distributed parallelism mode: {self.config.trainer.distributed_parallelism}")
 
         log.info("Starting training...")
+        # print("starting training")
         self.callbacks.on_train_start(model, iteration=iteration)
         # Initial validation.
         if self.config.trainer.run_validation and iteration == 0 and self.config.trainer.run_validation_on_start:
@@ -92,6 +93,7 @@ class CosmosPolicyTrainer(ImaginaireTrainer):
                 dataloader_train.sampler.set_epoch(epoch)
                 dataloader_train_iter = iter(dataloader_train)
                 while True:
+                    # print(iteration)
                     self.callbacks.on_before_dataloading(iteration)
                     try:
                         with (
@@ -120,6 +122,7 @@ class CosmosPolicyTrainer(ImaginaireTrainer):
                         model_ddp.train()
                     assert model_ddp.training, "model_ddp is not in training mode."
                     assert model.training, "model is not in training mode."
+                    # print("training")
                     output_batch, loss, grad_accum_iter = self.training_step(
                         model_ddp,
                         optimizer,
@@ -140,10 +143,11 @@ class CosmosPolicyTrainer(ImaginaireTrainer):
                     # Save checkpoint.
                     if iteration % self.config.checkpoint.save_iter == 0:
                         self.checkpointer.save(model, optimizer, scheduler, grad_scaler, iteration=iteration)
-                    self.callbacks.on_training_step_end(model, data_batch, output_batch, loss, iteration=iteration)
+                    self.callbacks.on_training_step_end(model, data_batch, output_batch, loss, iteration=iteration, dataloader_len = len(dataloader_train_iter) / self.config.trainer.grad_accum_iter)
                     # Validation.
                     if self.config.trainer.run_validation and iteration % self.config.trainer.validation_iter == 0:
                         self.validate(model, dataloader_val, iteration=iteration)
+                    # print(torch_profiler, memory_profiler)
                     # This iteration is successful; reset the timeout signal.
                     signal.alarm(self.config.trainer.timeout_period)
                     self.straggler_detector.generate_report(iteration)

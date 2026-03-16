@@ -83,7 +83,7 @@ if text_model_type == "t5":
                 #     break
                 # print(encoded_text.shape)
             text_embeddings_dict[d_name] = text_embeddings
-            break
+            # break
     
     with open(save_path, "wb") as fp:
         pickle.dump(encoded_text, fp)

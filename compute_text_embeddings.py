@@ -45,7 +45,8 @@ process_chunk_size = 1
 max_length = 512
 hidden_size = 1024
 text_embeddings_dict = {}
-save_path = "/mnt/wangxiaofa/robot_dataset/t5_embeddings_pretrain.pkl"
+save_root = "/mnt/wangxiaofa/robot_dataset/lerobot-format/t5_embeddings"
+os.makedirs(save_root, exist_ok=True)
 if text_model_type == "t5":
     # ckpt_path = "/Data/lzl/huggingface/t5-11b"
     ckpt_path = "/mnt/wangxiaofa/RDT_module_params/t5-11b"
@@ -63,6 +64,7 @@ if text_model_type == "t5":
         d_path = name2path_dict[d_name]
         data_path = os.path.join(data_root, d_path)
         if os.path.exists(data_path):
+            print(f"Processing {data_path}")
             task_path = os.path.join(data_path, "meta", "tasks.jsonl")
             tasks = []
             with open(task_path, "r") as f:
@@ -84,6 +86,6 @@ if text_model_type == "t5":
                 # print(encoded_text.shape)
             text_embeddings_dict[d_name] = text_embeddings
             # break
-    
-    with open(save_path, "wb") as fp:
-        pickle.dump(encoded_text, fp)
+            save_path = os.path.join(save_root, f"t5_embeddings_{d_name}.pkl")
+            with open(save_path, "wb") as fp:
+                pickle.dump(text_embeddings_dict, fp)

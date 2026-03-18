@@ -1334,10 +1334,10 @@ class MultiDatasetforDistTraining(torch.utils.data.Dataset):
         
         # 4. Aggregate dataset stats from all datasets
         self.stats = aggregate_stats([dataset.meta.stats for dataset in self.datasets], 
-                                     max_dim = max_action_dim)
+                                     max_dims = {"action": max_action_dim, "observation.state": max_state_dim})
         
         # save_to_json(self.stats, os.path.join("/home/cosmos/.cache/lerobot_data", f"{data_mix}_stats.json"))
-        save_to_json(self.stats, os.path.join("/mnt/wangxiaofa/robot_dataset/lerobot-format", f"{data_mix}_stats.json"))
+        # save_to_json(self.stats, os.path.join("/mnt/wangxiaofa/robot_dataset/lerobot-format", f"{data_mix}_stats.json"))
         
         
         # in fact, we do not use it, so just simply copy
@@ -1625,7 +1625,7 @@ class MultiDatasetforDistTraining(torch.utils.data.Dataset):
         )
         # print(images.shape) # torch.Size([37, 3, 256, 256])
         action_chunk = item["action"] # pad with last action
-        # print(torch.max(proprio), torch.min(proprio))
+        # print(torch.max(proprio), torch.min(proprio), proprio.shape)
         # print(images.shape, action_chunk.shape, proprio.shape, future_proprio.shape) # torch.Size([3, 37, 224, 224]) torch.Size([16, 32]) torch.Size([32]) torch.Size([32])
         # print(self.t5_text_embeddings.keys(), item["task"])
         # print(self.t5_text_embeddings[item["task"]].shape) # 1 512 1024

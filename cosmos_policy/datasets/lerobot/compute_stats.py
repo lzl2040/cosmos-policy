@@ -606,7 +606,7 @@ def aggregate_stats_v2(stats_list: list[dict[str, dict]], max_dim = 32) -> dict[
 
     return aggregated_stats
 
-def aggregate_stats(stats_list: list[dict[str, dict]], max_dim = 32) -> dict[str, dict[str, np.ndarray]]:
+def aggregate_stats(stats_list: list[dict[str, dict]], max_dims = 32) -> dict[str, dict[str, np.ndarray]]:
     """Aggregate stats from multiple compute_stats outputs into a single set of stats.
 
     The final stats will have the union of all data keys from each of the stats dicts.
@@ -629,9 +629,13 @@ def aggregate_stats(stats_list: list[dict[str, dict]], max_dim = 32) -> dict[str
         # for dataset without ego_dex
         if key in ["action", "observation.state"]:
             pad_stats_with_key = []
+            max_dim = max_dims[key]
             for stats in stats_with_key: # for different dataset
                 pad_stats = {}
                 pad_len = max_dim - len(stats["mean"])
+                if pad_len <= 0:
+                    pad_stats_with_key.append(stats)
+                    continue
                 # np.pad(数组, (左补数量, 右补数量), mode="constant", constant_values=填充值)
                 pad_stats["mean"] = np.pad(stats["mean"], (0, pad_len), mode="constant", constant_values=0)
                 pad_stats["std"] = np.pad(stats["std"], (0, pad_len), mode="constant", constant_values=1)

@@ -82,6 +82,32 @@ from tabulate import tabulate
 
 CODEBASE_VERSION = "v2.1"
 
+def tensor_to_list(obj):
+    """
+    递归地将包含 torch.Tensor 的结构转换为纯 Python 数据结构。
+    """
+    if isinstance(obj, torch.Tensor):
+        return obj.tolist()
+    elif isinstance(obj, dict):
+        return {k: tensor_to_list(v) for k, v in obj.items()}
+    elif isinstance(obj, list):
+        return [tensor_to_list(v) for v in obj]
+    else:
+        return obj
+
+def save_to_json(data, path):
+    """
+    保存数据为 JSON 文件。
+    """
+    converted_data = tensor_to_list(data)
+    
+    # 创建路径中不存在的文件夹
+    os.makedirs(os.path.dirname(path), exist_ok=True)
+    
+    # 保存为 JSON 文件
+    with open(path, 'w') as f:
+        json.dump(converted_data, f, indent=4)
+
 def resolve_delta_timestamps(ds_meta, chunk_size, use_reward=False):
 
     delta_timestamps = {}
@@ -1310,6 +1336,10 @@ class MultiDatasetforDistTraining(torch.utils.data.Dataset):
         self.stats = aggregate_stats([dataset.meta.stats for dataset in self.datasets], 
                                      max_dim = max_action_dim)
         
+        # save_to_json(self.stats, os.path.join("/home/cosmos/.cache/lerobot_data", f"{data_mix}_stats.json"))
+        save_to_json(self.stats, os.path.join("/mnt/wangxiaofa/robot_dataset/lerobot-format", f"{data_mix}_stats.json"))
+        
+        
         # in fact, we do not use it, so just simply copy
         self.meta = ds_meta
         
@@ -1414,8 +1444,8 @@ class MultiDatasetforDistTraining(torch.utils.data.Dataset):
         return item
     
     def norm_data_with_quantile(self, item):
-        key1 = "q01"
-        key2 = "q99"
+        key1 = "min"
+        key2 = "max"
         state_q01 = torch.ones(self.max_state_dim) * -1
         state_q99 = torch.ones(self.max_state_dim)
         action_q01 = torch.ones(self.max_action_dim) * -1
@@ -1595,6 +1625,7 @@ class MultiDatasetforDistTraining(torch.utils.data.Dataset):
         )
         # print(images.shape) # torch.Size([37, 3, 256, 256])
         action_chunk = item["action"] # pad with last action
+        # print(torch.max(proprio), torch.min(proprio))
         # print(images.shape, action_chunk.shape, proprio.shape, future_proprio.shape) # torch.Size([3, 37, 224, 224]) torch.Size([16, 32]) torch.Size([32]) torch.Size([32])
         # print(self.t5_text_embeddings.keys(), item["task"])
         # print(self.t5_text_embeddings[item["task"]].shape) # 1 512 1024

@@ -570,8 +570,16 @@ def aggregate_feature_stats(stats_ft_list: list[dict[str, dict]]) -> dict[str, d
         for q_key in quantile_keys:
             if all(q_key in s for s in stats_ft_list):
                 quantile_values = np.stack([s[q_key] for s in stats_ft_list])
+                # print(quantile_values)
                 weighted_quantiles = quantile_values * counts
                 aggregated[q_key] = weighted_quantiles.sum(axis=0) / total_count
+                # if q_key == "q01":
+                #     aggregated[q_key] = quantile_values.min(axis=0)
+                # elif q_key == "q99":
+                #     aggregated[q_key] = quantile_values.max(axis=0)
+                # else:
+                #     # 中间的 quantile，比如 q50，可以用平均
+                #     aggregated[q_key] = quantile_values.mean(axis=0)
 
     return aggregated
 
@@ -621,14 +629,14 @@ def aggregate_stats(stats_list: list[dict[str, dict]], max_dim = 32) -> dict[str
         # for dataset without ego_dex
         if key in ["action", "observation.state"]:
             pad_stats_with_key = []
-            for stats in stats_with_key:
+            for stats in stats_with_key: # for different dataset
                 pad_stats = {}
                 pad_len = max_dim - len(stats["mean"])
                 # np.pad(数组, (左补数量, 右补数量), mode="constant", constant_values=填充值)
                 pad_stats["mean"] = np.pad(stats["mean"], (0, pad_len), mode="constant", constant_values=0)
                 pad_stats["std"] = np.pad(stats["std"], (0, pad_len), mode="constant", constant_values=1)
-                pad_stats["max"] = np.pad(stats["max"], (0, pad_len), mode="constant", constant_values=0)
-                pad_stats["min"] = np.pad(stats["min"], (0, pad_len), mode="constant", constant_values=0)
+                pad_stats["max"] = np.pad(stats["max"], (0, pad_len), mode="constant", constant_values=1)
+                pad_stats["min"] = np.pad(stats["min"], (0, pad_len), mode="constant", constant_values=-1)
                 pad_stats["q01"] = np.pad(stats["q01"], (0, pad_len), mode="constant", constant_values=-1)
                 pad_stats["q10"] = np.pad(stats["q10"], (0, pad_len), mode="constant", constant_values=-0.5)
                 pad_stats["q50"] = np.pad(stats["q50"], (0, pad_len), mode="constant", constant_values=0)

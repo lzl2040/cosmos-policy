@@ -132,6 +132,7 @@ cosmos_predict2_2b_480p_libero = LazyDict(
                 sigma_conditional=0.0,  # No noise on conditional latents
                 conditioning_strategy="frame_replace",
                 denoise_replace_gt_frames=True,
+                mask_value_prediction_loss_for_policy_prediction=True,
                 # tokenizer=dict(
                 #     chunk_duration=33,  # 1 blank + 32 images (4 proprio, 4 wrist image, 4 primary image, 4 action, 4 future proprio, 4 future wrist, 4 future primary, 4 value)
                 # ),

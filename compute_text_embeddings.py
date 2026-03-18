@@ -44,6 +44,7 @@ data_mix = "oxe_magic_soup_plus"
 process_chunk_size = 1
 max_length = 512
 hidden_size = 1024
+max_task_chunk = 40000
 text_embeddings_dict = {}
 save_root = "/mnt/wangxiaofa/robot_dataset/lerobot-format/t5_embeddings"
 os.makedirs(save_root, exist_ok=True)
@@ -57,35 +58,49 @@ if text_model_type == "t5":
     # data_root = "/Data/lerobot_data"
     data_root = "/mnt/wangxiaofa/robot_dataset/lerobot-format"
     mixture_sets = OXE_NAMED_MIXTURES[data_mix]
+    process_datasets = []
+    for d_name, d_weight in mixture_sets:
+        process_datasets.append(d_name, )
+        
     with open(val2root_json_path, "r") as f:
         name2path_dict = json.load(f)
     
-    for d_name, ratio in name2path_dict.items():
+    start_from = "language_table"
+    start_run = start_from is None
+
+    for d_name in process_datasets:
+        if d_name == start_from:
+            start_run = True
+        if not start_run:
+            continue
         d_path = name2path_dict[d_name]
         data_path = os.path.join(data_root, d_path)
-        if os.path.exists(data_path):
-            print(f"Processing {data_path}")
-            task_path = os.path.join(data_path, "meta", "tasks.jsonl")
-            tasks = []
-            with open(task_path, "r") as f:
-                for line in f:
-                    d_dict = json.loads(line)
-                    tasks.append((d_dict["task_index"], d_dict["task"]))
-            text_embeddings_dict = {}
+        if not os.path.exists(data_path):
+            print(f"[Skip] path not exist: {data_path}")
+            continue
+        task_path = os.path.join(data_path, "meta", "tasks.jsonl")
+        tasks = []
+        with open(task_path, "r") as f:
+            for line in f:
+                d_dict = json.loads(line)
+                tasks.append((d_dict["task_index"], d_dict["task"]))
+        task_chunk_len = math.ceil(len(tasks) / max_task_chunk)
+        chunk_id = 0
+        while chunk_id < task_chunk_len:
+            print(f"Processing {data_path}, Chunk:{chunk_id}/{task_chunk_len}")
+            start = chunk_id * max_task_chunk
+            end = (chunk_id + 1) * max_task_chunk if (chunk_id + 1) * max_task_chunk < len(tasks) else len(tasks)
+            process_tasks = tasks[start:end]
             text_embeddings = []
-            for i in tqdm(range(len(tasks))):
-                t_id, prompts = tasks[i]
+            for i in tqdm(range(len(process_tasks))):
+                t_id, prompts = process_tasks[i]
                 with torch.no_grad():
                     encoded_text = encode_t5_text_embeddings(text_encoder, tokenizer, prompts, 
                                                             max_length=max_length, device=device)
                 encoded_text = encoded_text.cpu().numpy().astype(np.float16)
                 # text_embeddings[start:end] = encoded_text
                 text_embeddings.append(encoded_text)
-                # if len(text_embeddings) > 10:
-                #     break
-                # print(encoded_text.shape)
-            text_embeddings_dict[d_name] = text_embeddings
-            # break
-            save_path = os.path.join(save_root, f"t5_embeddings_{d_name}.pkl")
+            save_path = os.path.join(save_root, f"t5_embeddings_{d_name}_chunk_{chunk_id}.pkl")
             with open(save_path, "wb") as fp:
-                pickle.dump(text_embeddings_dict, fp)
+                pickle.dump(text_embeddings, fp)
+            chunk_id += 1

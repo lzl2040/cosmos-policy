@@ -102,6 +102,7 @@ if text_model_type == "t5":
                 os.makedirs(save_dir, exist_ok=True)
                 save_path = os.path.join(save_dir, f"task_{t_id}.npy")
                 np.save(save_path, encoded_text)
+                chunk_id += 1
                 
                 # text_embeddings[start:end] = encoded_text
             #     text_embeddings.append(encoded_text)

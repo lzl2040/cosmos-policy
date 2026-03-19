@@ -65,14 +65,14 @@ if text_model_type == "t5":
     with open(val2root_json_path, "r") as f:
         name2path_dict = json.load(f)
     
-    start_from = "language_table"
-    start_run = start_from is None
+    # start_from = "language_table"
+    # start_run = start_from is None
 
     for d_name in process_datasets:
-        if d_name == start_from:
-            start_run = True
-        if not start_run:
-            continue
+        # if d_name == start_from:
+        #     start_run = True
+        # if not start_run:
+        #     continue
         d_path = name2path_dict[d_name]
         data_path = os.path.join(data_root, d_path)
         if not os.path.exists(data_path):
@@ -98,9 +98,14 @@ if text_model_type == "t5":
                     encoded_text = encode_t5_text_embeddings(text_encoder, tokenizer, prompts, 
                                                             max_length=max_length, device=device)
                 encoded_text = encoded_text.cpu().numpy().astype(np.float16)
+                save_dir = os.path.join(save_root, d_name)
+                os.makedirs(save_dir, exist_ok=True)
+                save_path = os.path.join(save_dir, f"task_{t_id}.npy")
+                np.save(save_path, encoded_text)
+                
                 # text_embeddings[start:end] = encoded_text
-                text_embeddings.append(encoded_text)
-            save_path = os.path.join(save_root, f"t5_embeddings_{d_name}_chunk_{chunk_id}.pkl")
-            with open(save_path, "wb") as fp:
-                pickle.dump(text_embeddings, fp)
-            chunk_id += 1
+            #     text_embeddings.append(encoded_text)
+            # save_path = os.path.join(save_root, f"t5_embeddings_{d_name}_chunk_{chunk_id}.pkl")
+            # with open(save_path, "wb") as fp:
+            #     pickle.dump(text_embeddings, fp)
+            # chunk_id += 1

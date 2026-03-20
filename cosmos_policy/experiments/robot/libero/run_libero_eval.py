@@ -123,6 +123,7 @@ import torch
 import torch.multiprocessing as mp
 import tqdm
 import wandb
+import math
 from libero.libero import benchmark
 
 from cosmos_policy.experiments.robot.cosmos_utils import (
@@ -135,6 +136,7 @@ from cosmos_policy.experiments.robot.cosmos_utils import (
     get_value_prediction,
     init_t5_text_embeddings_cache,
     load_dataset_stats,
+    load_dataset_stats_my,
     query_model_parallel,
 )
 from cosmos_policy.experiments.robot.libero.libero_utils import (
@@ -265,6 +267,8 @@ class PolicyEvalConfig:
     jpeg_compress: bool = True                                           # If True, apply JPEG compression to images before saving
 
     # fmt: on
+    max_action_dim: int = 15
+    max_state_dim: int = 15
 
 
 # Set up logging
@@ -275,6 +279,35 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
+
+def normalize_gripper_action(action, binarize=True):
+    """
+    Changes gripper action (last dimension of action vector) from [0,1] to [-1,+1].
+    Necessary for some environments (not Bridge) because the dataset wrapper standardizes gripper actions to [0,1].
+    Note that unlike the other action dimensions, the gripper action is not normalized to [-1,+1] by default by
+    the dataset wrapper.
+
+    Normalization formula: y = 2 * (x - orig_low) / (orig_high - orig_low) - 1
+    """
+    # Just normalize the last action to [-1,+1].
+    orig_low, orig_high = 0.0, 1.0
+    action[..., -1] = 2 * (action[..., -1] - orig_low) / (orig_high - orig_low) - 1
+
+    if binarize:
+        # Binarize to -1 or +1.
+        action[..., -1] = np.sign(action[..., -1])
+
+    return action
+
+
+def invert_gripper_action(action):
+    """
+    Flips the sign of the gripper action (last dimension of action vector).
+    This is necessary for some environments where -1 = open, +1 = close, since
+    the RLDS dataloader aligns gripper actions such that 0 = close, 1 = open.
+    """
+    action[..., -1] = action[..., -1] * -1.0
+    return action
 
 def validate_config(cfg: PolicyEvalConfig) -> None:
     """Validate configuration parameters."""
@@ -320,6 +353,31 @@ def load_initial_states(cfg: PolicyEvalConfig, task_suite, task_id: int, log_fil
         log_message("Using default initial states", log_file)
         return initial_states, None
 
+def quat2axisangle(quat):
+    """
+    Copied from robosuite: https://github.com/ARISE-Initiative/robosuite/blob/eafb81f54ffc104f905ee48a16bb15f059176ad3/robosuite/utils/transform_utils.py#L490C1-L512C55
+
+    Converts quaternion to axis-angle format.
+    Returns a unit vector direction scaled by its angle in radians.
+
+    Args:
+        quat (np.array): (x,y,z,w) vec4 float angles
+
+    Returns:
+        np.array: (ax,ay,az) axis-angle exponential coordinates
+    """
+    # clip quaternion
+    if quat[3] > 1.0:
+        quat[3] = 1.0
+    elif quat[3] < -1.0:
+        quat[3] = -1.0
+
+    den = np.sqrt(1.0 - quat[3] * quat[3])
+    if math.isclose(den, 0.0):
+        # This is (close to) a zero degree rotation, immediately return
+        return np.zeros(3)
+
+    return (quat[:3] * 2.0 * math.acos(quat[3])) / den
 
 def prepare_observation(obs, resize_size, flip_images: bool = False):
     """Prepare observation for policy input."""
@@ -331,8 +389,11 @@ def prepare_observation(obs, resize_size, flip_images: bool = False):
     observation = {
         "primary_image": img,
         "wrist_image": wrist_img,
-        "proprio": np.concatenate((obs["robot0_gripper_qpos"], obs["robot0_eef_pos"], obs["robot0_eef_quat"])),
+        # "proprio": np.concatenate((obs["robot0_gripper_qpos"], obs["robot0_eef_pos"], obs["robot0_eef_quat"])),
+        "proprio": np.concatenate((obs["robot0_eef_pos"], quat2axisangle(obs["robot0_eef_quat"]), obs["robot0_gripper_qpos"])),
     }
+    # print(observation["proprio"])
+    # print(observation["proprio"].shape)
 
     return observation  # Return processed observation
 
@@ -595,7 +656,11 @@ def run_episode(
                 log_message(f"t={t}: Selected seed {best_seed} with value = {best_value_predictions:.4f}", log_file)
 
             # Get action from queue
-            action = action_queue.popleft()
+            action = action_queue.popleft() # for cosmos policy libero data, gripper max=1, min=-1, but for ours, max=1, min=0
+            
+            # for our libero data
+            action = normalize_gripper_action(action, binarize=True)
+            action = invert_gripper_action(action)
 
             # Process action
             print(f"t: {t}\t action: {action}")
@@ -821,7 +886,8 @@ def eval_libero(cfg: PolicyEvalConfig) -> float:
     init_t5_text_embeddings_cache(cfg.t5_text_embeddings_path)
 
     # Load Cosmos Policy dataset stats
-    dataset_stats = load_dataset_stats(cfg.dataset_stats_path)
+    dataset_stats = load_dataset_stats_my(cfg.dataset_stats_path)
+    # dataset_stats = load_dataset_stats(cfg.dataset_stats_path)
 
     # If using parallel inference, initialize worker pool
     worker_pool = None

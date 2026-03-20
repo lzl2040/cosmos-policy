@@ -905,7 +905,8 @@ class LeRobotDataset(torch.utils.data.Dataset):
         query_indices = None
         if self.delta_indices is not None:
             query_indices, padding = self._get_query_indices(idx, ep_idx)
-            query_result = self._query_hf_dataset(query_indices)
+            # print(query_indices)
+            query_result = self._query_hf_dataset(query_indices) # read action and state
             item = {**item, **padding}
             for key, val in query_result.items():
                 item[key] = val
@@ -1444,8 +1445,10 @@ class MultiDatasetforDistTraining(torch.utils.data.Dataset):
         return item
     
     def norm_data_with_quantile(self, item):
-        key1 = "min"
-        key2 = "max"
+        # key1 = "min"
+        # key2 = "max"
+        key1 = "q01"
+        key2 = "q99"
         state_q01 = torch.ones(self.max_state_dim) * -1
         state_q99 = torch.ones(self.max_state_dim)
         action_q01 = torch.ones(self.max_action_dim) * -1
@@ -1563,12 +1566,12 @@ class MultiDatasetforDistTraining(torch.utils.data.Dataset):
             current_image_latent_idx = current_sequence_idx
             current_sequence_idx += 1
             
-            current_image2_latent_idx = -1
-            # current_secondary_image = item[IMAGE_SECOND][CURRENT_IDX]
-            # current_secondary_image = duplicate_array(current_secondary_image, total_num_copies=self.num_duplicates_per_image)
-            # image_list.append(current_secondary_image)
-            # current_image2_latent_idx = current_sequence_idx
-            # current_sequence_idx += 1
+            # current_image2_latent_idx = -1
+            current_secondary_image = item[IMAGE_SECOND][CURRENT_IDX]
+            current_secondary_image = duplicate_array(current_secondary_image, total_num_copies=self.num_duplicates_per_image)
+            image_list.append(current_secondary_image)
+            current_image2_latent_idx = current_sequence_idx
+            current_sequence_idx += 1
             
         # Add blank image for action chunk
         blank_image = np.zeros_like(item[IMAGE_PRIMARY][CURRENT_IDX])
@@ -1609,12 +1612,12 @@ class MultiDatasetforDistTraining(torch.utils.data.Dataset):
             current_sequence_idx += 1
 
             
-            future_image2_latent_idx = -1
-            # future_secondary_image = item[IMAGE_SECOND][FUTURE_IDX]
-            # future_secondary_image = duplicate_array(future_secondary_image, total_num_copies=self.num_duplicates_per_image)
-            # image_list.append(future_secondary_image)
-            # future_image2_latent_idx = current_sequence_idx
-            # current_sequence_idx += 1
+            # future_image2_latent_idx = -1
+            future_secondary_image = item[IMAGE_SECOND][FUTURE_IDX]
+            future_secondary_image = duplicate_array(future_secondary_image, total_num_copies=self.num_duplicates_per_image)
+            image_list.append(future_secondary_image)
+            future_image2_latent_idx = current_sequence_idx
+            current_sequence_idx += 1
         
         # Stack images and preprocess
         images = np.concatenate(image_list, axis=0)

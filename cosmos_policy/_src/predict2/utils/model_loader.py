@@ -217,10 +217,11 @@ def load_model_state_dict_from_checkpoint(
 
     load_from_local = True
     local_s3_ckpt_fp = get_checkpoint_path(cur_key_ckpt_full_path)
+    load_from_local = False
 
     if SMOKE:
         return model
-
+    
     if load_from_local:
         # Load on rank0 only and broadcast
         if distributed.is_rank0():

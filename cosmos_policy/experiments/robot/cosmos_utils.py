@@ -261,6 +261,33 @@ def load_dataset_stats(dataset_stats_path: str) -> dict:
     return dataset_stats
 
 
+def load_dataset_stats_my(dataset_stats_path: str) -> dict:
+    """
+    Load dataset statistics from a JSON file.
+
+    This function loads normalization statistics needed for action un-normalization
+    and proprio rescaling. It handles both local paths and HuggingFace paths.
+
+    Args:
+        dataset_stats_path (str): Path to dataset statistics JSON file.
+                                  Can be a local path or HF path (e.g., "nvidia/Cosmos-Policy-LIBERO-Predict2-2B/libero_dataset_statistics.json")
+
+    Returns:
+        dict: Dataset statistics with numpy arrays for keys like "actions_min", "actions_max", "proprio_min", "proprio_max"
+
+    Raises:
+        AssertionError: If dataset_stats_path is empty or file doesn't exist
+    """
+    assert dataset_stats_path != "", "Must provide `dataset_stats_path` for action un-normalization!"
+    dataset_stats_path = resolve_path(dataset_stats_path)
+    assert os.path.exists(dataset_stats_path), f"Dataset stats do not exist at path: {dataset_stats_path}"
+
+    with open(dataset_stats_path, "r") as f:
+        dataset_stats = json.load(f)
+
+    return dataset_stats
+
+
 def get_model(cfg):
     """
     Load and initialize the Cosmos model and configuration from checkpoint.
@@ -584,6 +611,7 @@ def extract_action_chunk_from_latent_sequence(
         f"Action shape {action_shape} requires {num_action_elements} elements, but the latent only has {num_latent_elements} elements!"
     )
     # Calculate how many full action chunks we can extract
+    # print(num_latent_elements, action_latent_frame.shape)
     num_action_chunks = num_latent_elements // num_action_elements
     # Get the full action chunks in the flat latent and then reshape to separate out the chunks
     # New shape: (batch_size, num_action_chunks, num_action_elements)
@@ -596,6 +624,7 @@ def extract_action_chunk_from_latent_sequence(
     # Take the average over all chunks, along dimension 1 (the num_action_chunks dimension)
     # New shape: (batch_size, chunk_size, action_dim)
     final_action_chunk = torch.mean(all_action_chunks, dim=1)
+    # final_action_chunk = all_action_chunks[:, 0]
     return final_action_chunk
 
 
@@ -620,7 +649,7 @@ def extract_value_from_latent_sequence(output_latent: torch.Tensor, value_indice
     return final_value
 
 
-def unnormalize_actions(actions: np.ndarray, dataset_stats: dict, scale_multiplier: float = 1.0):
+def unnormalize_actions(actions: np.ndarray, dataset_stats: dict, scale_multiplier: float = 1.0, max_action_dim = 15):
     """
     Unnormalize actions to the original dataset scale.
 
@@ -634,8 +663,14 @@ def unnormalize_actions(actions: np.ndarray, dataset_stats: dict, scale_multipli
     Returns:
         np.ndarray: Unnormalized actions
     """
-    actions_min = dataset_stats["actions_min"]
-    actions_max = dataset_stats["actions_max"]
+    # actions_min = dataset_stats["actions_min"]
+    # actions_max = dataset_stats["actions_max"]
+    actions_min = np.array(dataset_stats["action"]["q01"])
+    actions_max = np.array(dataset_stats["action"]["q99"])
+    pad_width = max_action_dim - actions_min.shape[0]
+    if pad_width > 0:
+        actions_min = np.pad(actions_min, (0, pad_width), mode='constant', constant_values=-1)
+        actions_max = np.pad(actions_max, (0, pad_width), mode='constant', constant_values=1)
     # Reshape actions from (B, chunk_size, action_dim) to (B * chunk_size, action_dim)
     original_shape = actions.shape
     actions = actions.reshape(-1, actions_min.shape[0])
@@ -648,7 +683,7 @@ def unnormalize_actions(actions: np.ndarray, dataset_stats: dict, scale_multipli
     return actions
 
 
-def rescale_proprio(proprio, dataset_stats, non_negative_only=False, scale_multiplier=1.0):
+def rescale_proprio(proprio, dataset_stats, non_negative_only=False, scale_multiplier=1.0, max_dim = 15):
     """
     Rescale (normalize) proprio to the range [-1,+1] or [0,+1], with optional scaling by scale_multiplier.
 
@@ -662,8 +697,15 @@ def rescale_proprio(proprio, dataset_stats, non_negative_only=False, scale_multi
         np.ndarray: Rescaled proprio
     """
     arr = proprio
-    curr_min = dataset_stats["proprio_min"]
-    curr_max = dataset_stats["proprio_max"]
+    # curr_min = dataset_stats["proprio_min"]
+    # curr_max = dataset_stats["proprio_max"]
+    curr_min = np.array(dataset_stats["observation.state"]["q01"])
+    curr_max = np.array(dataset_stats["observation.state"]["q99"])
+    # print(curr_min)
+    pad_width = max_dim - curr_min.shape[0]
+    if pad_width > 0:
+        curr_min = np.pad(curr_min, (0, pad_width), mode='constant', constant_values=-1)
+        curr_max = np.pad(curr_max, (0, pad_width), mode='constant', constant_values=1)
     # First, scale to [-1,+1] or [0,+1]:
     # - For [-1,+1]: x_new = 2 * ((x - curr_min) / (curr_max - curr_min)) - 1
     # - For [0,+1]: x_new = (x - curr_min) / (curr_max - curr_min)
@@ -901,9 +943,11 @@ def get_action(
             all_camera_images = [
                 obs["wrist_image"],
                 obs["primary_image"],
+                np.zeros_like(obs["primary_image"])
             ]
             WRIST_IMAGE_IDX = 0
             IMAGE_IDX = 1
+            IMAGE2_IDX = 2
         elif cfg.suite == "robocasa":
             all_camera_images = [
                 obs["wrist_image"],
@@ -933,8 +977,14 @@ def get_action(
         proprio = None
         if cfg.use_proprio:
             proprio = obs["proprio"]
+            # print(proprio.shape)
+            org_state_dim = proprio.shape[0]
+            pad_width = cfg.max_state_dim - org_state_dim
+            if pad_width > 0:
+                proprio = np.pad(proprio, (0, pad_width), mode='constant', constant_values=0)
             if cfg.normalize_proprio:
-                proprio = rescale_proprio(proprio, dataset_stats, non_negative_only=False, scale_multiplier=1.0)
+                proprio = rescale_proprio(proprio, dataset_stats, non_negative_only=False, 
+                                          scale_multiplier=1.0, max_dim = cfg.max_state_dim)
 
         # Build the raw image sequence that will be fed to the model (and the VAE tokenizer)
         image_sequence = []
@@ -973,7 +1023,7 @@ def get_action(
                 current_sequence_idx += 1
             else:
                 current_wrist_image2_latent_idx = -1
-
+        # print(cfg.use_third_person_image, cfg.num_third_person_images)
         # Add current primary image and optional secondary image (these are third-person images)
         if cfg.use_third_person_image:
             primary_image_duplicated = duplicate_array(
@@ -1024,10 +1074,14 @@ def get_action(
             else:
                 future_image2_latent_idx = -1
 
+        # print(current_sequence_idx)
         # Add placeholder for the value (value will be injected into latent later)
-        image_sequence.append(blank_image_duplicated.copy())
-        value_latent_idx = current_sequence_idx
-        current_sequence_idx += 1
+        # image_sequence.append(blank_image_duplicated.copy())
+        # value_latent_idx = current_sequence_idx
+        # current_sequence_idx += 1
+        
+        value_latent_idx = -1
+        
 
         # Prepare input data batch, which is needed for sampling
         # We follow the logic in cosmos_policy._src.predict2.inference.video2world.py > _get_data_batch_input
@@ -1036,11 +1090,14 @@ def get_action(
         raw_image_sequence = np.tile(raw_image_sequence, (batch_size, 1, 1, 1, 1))  # (1, T, H, W, C) -> (B, T, H, W, C)
         raw_image_sequence = np.transpose(raw_image_sequence, (0, 4, 1, 2, 3))  # (B, T, H, W, C) -> (B, C, T, H, W)
         raw_image_sequence = torch.from_numpy(raw_image_sequence).to(dtype=torch.uint8).cuda()
+        # print(raw_image_sequence.shape) # torch.Size([1, 3, 29, 224, 224])
+        # print(torch.max(raw_image_sequence), torch.min(raw_image_sequence))
         if cfg.use_proprio:
             # Convert proprio to tensor so that it can be injected into latent later
             proprio_tensor = (
                 torch.from_numpy(proprio).reshape(batch_size, -1).to(dtype=torch.bfloat16).cuda()
             )  # (B, proprio_dim)
+            print(torch.max(proprio_tensor), torch.min(proprio_tensor))
         data_batch = {
             "dataset_name": "video_data",
             "video": raw_image_sequence,  # (B, C, T, H, W)
@@ -1105,7 +1162,8 @@ def get_action(
                 if cfg.use_third_person_image and cfg.num_third_person_images == 2
                 else torch.tensor([-1] * batch_size, dtype=torch.int64).cuda()
             ),
-            "value_latent_idx": torch.tensor([value_latent_idx] * batch_size, dtype=torch.int64).cuda(),
+            # "value_latent_idx": torch.tensor([value_latent_idx] * batch_size, dtype=torch.int64).cuda(),
+             "value_latent_idx": torch.tensor([value_latent_idx] * batch_size, dtype=torch.int64).cuda(),
         }
 
         # Generate the output latent sequence - contains the predicted action chunk, future state, and value, but
@@ -1126,7 +1184,8 @@ def get_action(
         )
         actions = (
             extract_action_chunk_from_latent_sequence(
-                generated_latent_with_action, action_shape=(cfg.chunk_size, ACTION_DIM), action_indices=action_indices
+                # generated_latent_with_action, action_shape=(cfg.chunk_size, ACTION_DIM), action_indices=action_indices
+                generated_latent_with_action, action_shape=(cfg.chunk_size, cfg.max_action_dim), action_indices=action_indices
             )
             .to(torch.float32)
             .cpu()
@@ -1135,8 +1194,11 @@ def get_action(
 
         # Unnormalize actions back to original dataset scale
         if cfg.unnormalize_actions:
-            actions = unnormalize_actions(actions, dataset_stats)
+            actions = unnormalize_actions(actions, dataset_stats, max_action_dim=cfg.max_action_dim)
 
+        # print(actions.shape) # B chunk_size action_dim
+        actions = actions[:, :, :ACTION_DIM]
+        
         # If generating future state and value in parallel with the actions (instead of autoregressively),
         # extract future state and value predictions from the generated sample now
         if generate_future_state_and_value_in_parallel:
@@ -1145,9 +1207,11 @@ def get_action(
                 INDICES_TO_REPLACE = [
                     0,
                     1,
-                    4,
                     5,
-                ]  # 0: blank, 1: curr proprio, 2: curr wrist img, 3: curr primary img, 4: action, 5: future proprio, 6: future wrist img, 7: future primary img, 8: value
+                    6,
+                ]  # 0: blank, 1: curr proprio, 2: curr wrist img, 3: curr primary img, 
+                # 4: secondary image, 5: action, 6: future proprio, 7: future wrist img, 8: future primary img, 
+                # 9: future secondary image
             elif cfg.suite == "robocasa":
                 INDICES_TO_REPLACE = [
                     0,

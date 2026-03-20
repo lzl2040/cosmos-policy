@@ -233,7 +233,7 @@ def decode_video_frames_torchcodec(
         logging.info(f"{closest_ts=}")
 
     # convert to float32 in [0,1] range
-    # closest_frames = (closest_frames / 255.0).type(torch.float32)
+    # closest_frames = (closest_frames / 255.0).type(torch.float32) # cosmos policy not need it
     closest_frames = closest_frames.type(torch.float32)
 
     if not len(timestamps) == len(closest_frames): 

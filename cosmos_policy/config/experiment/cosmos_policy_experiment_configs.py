@@ -68,8 +68,8 @@ libero_all_4_suites_dataset = L(MultiDatasetforDistTraining)(
     parent_dir="/mnt/wangxiaofa/robot_dataset/lerobot-format",
     vla2root_json="vla2root.json",
     balance_dataset_weights=True,
-    max_action_dim=7,
-    max_state_dim=8
+    max_action_dim=16,
+    max_state_dim=16
 )
 cosmos_predict2_2b_480p_libero = LazyDict(
     dict(
@@ -126,19 +126,19 @@ cosmos_predict2_2b_480p_libero = LazyDict(
                     ),
                 ),
                 # state_t=9,  # Latent temporal dim (blank, proprio, wrist, primary, action, future proprio, future wrist, future primary, value)
-                state_t = 8,
-                min_num_conditional_frames=4,  # 1 blank, 3 conditioning (proprio, wrist, primary)
-                max_num_conditional_frames=4,  # 1 blank, 3 conditioning (proprio, wrist, primary)
+                state_t = 10,
+                min_num_conditional_frames=5,  # 1 blank, 3 conditioning (proprio, wrist, primary)
+                max_num_conditional_frames=5,  # 1 blank, 3 conditioning (proprio, wrist, primary)
                 sigma_conditional=0.0,  # No noise on conditional latents
                 conditioning_strategy="frame_replace",
                 denoise_replace_gt_frames=True,
-                mask_value_prediction_loss_for_policy_prediction=True,
+                # mask_value_prediction_loss_for_policy_prediction=True,
                 # tokenizer=dict(
                 #     chunk_duration=33,  # 1 blank + 32 images (4 proprio, 4 wrist image, 4 primary image, 4 action, 4 future proprio, 4 future wrist, 4 future primary, 4 value)
                 # ),
                 
                 tokenizer=dict(
-                    chunk_duration=29,  # 1 blank + 36 images (4 proprio, 4 wrist image, 4 primary image, 4 secondary, 4 action, 4 future proprio, 4 future wrist, 4 future primary, 4 future secondary)
+                    chunk_duration=37,  # 1 blank + 36 images (4 proprio, 4 wrist image, 4 primary image, 4 secondary, 4 action, 4 future proprio, 4 future wrist, 4 future primary, 4 future secondary)
                 ),
                 ema=dict(
                     enabled=False,

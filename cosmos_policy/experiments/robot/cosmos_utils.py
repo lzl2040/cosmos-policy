@@ -288,7 +288,7 @@ def load_dataset_stats_my(dataset_stats_path: str) -> dict:
     return dataset_stats
 
 
-def get_model(cfg):
+def get_model(cfg, device):
     """
     Load and initialize the Cosmos model and configuration from checkpoint.
 
@@ -318,7 +318,7 @@ def get_model(cfg):
         load_ema_to_reg=False,
     )
     model.eval()
-    model = model.to(DEVICE)
+    model = model.to(device)
     return model, config
 
 
@@ -665,8 +665,8 @@ def unnormalize_actions(actions: np.ndarray, dataset_stats: dict, scale_multipli
     """
     # actions_min = dataset_stats["actions_min"]
     # actions_max = dataset_stats["actions_max"]
-    actions_min = np.array(dataset_stats["action"]["q01"])
-    actions_max = np.array(dataset_stats["action"]["q99"])
+    actions_min = np.array(dataset_stats["action"]["min"])
+    actions_max = np.array(dataset_stats["action"]["max"])
     pad_width = max_action_dim - actions_min.shape[0]
     if pad_width > 0:
         actions_min = np.pad(actions_min, (0, pad_width), mode='constant', constant_values=-1)
@@ -699,8 +699,8 @@ def rescale_proprio(proprio, dataset_stats, non_negative_only=False, scale_multi
     arr = proprio
     # curr_min = dataset_stats["proprio_min"]
     # curr_max = dataset_stats["proprio_max"]
-    curr_min = np.array(dataset_stats["observation.state"]["q01"])
-    curr_max = np.array(dataset_stats["observation.state"]["q99"])
+    curr_min = np.array(dataset_stats["observation.state"]["min"])
+    curr_max = np.array(dataset_stats["observation.state"]["max"])
     # print(curr_min)
     pad_width = max_dim - curr_min.shape[0]
     if pad_width > 0:
@@ -902,6 +902,7 @@ def get_action(
     generate_future_state_and_value_in_parallel: bool = True,
     worker_id: int = 0,
     batch_size: int = 1,
+    device: str = "cuda:0"
 ) -> List[np.ndarray]:
     """
     Generate action predictions with the policy.
@@ -931,7 +932,7 @@ def get_action(
         if isinstance(task_label_or_embedding, str):
             text_embedding = get_t5_embedding_from_cache(task_label_or_embedding)
         elif isinstance(task_label_or_embedding, np.ndarray):
-            text_embedding = torch.tensor(task_label_or_embedding, dtype=torch.bfloat16).cuda()
+            text_embedding = torch.tensor(task_label_or_embedding, dtype=torch.bfloat16).to(device)
 
         # Collect all input images
         # Examples:
@@ -1089,81 +1090,81 @@ def get_action(
         raw_image_sequence = np.expand_dims(raw_image_sequence, axis=0)  # (T, H, W, C) -> (1, T, H, W, C)
         raw_image_sequence = np.tile(raw_image_sequence, (batch_size, 1, 1, 1, 1))  # (1, T, H, W, C) -> (B, T, H, W, C)
         raw_image_sequence = np.transpose(raw_image_sequence, (0, 4, 1, 2, 3))  # (B, T, H, W, C) -> (B, C, T, H, W)
-        raw_image_sequence = torch.from_numpy(raw_image_sequence).to(dtype=torch.uint8).cuda()
+        raw_image_sequence = torch.from_numpy(raw_image_sequence).to(dtype=torch.uint8).to(device)
         # print(raw_image_sequence.shape) # torch.Size([1, 3, 29, 224, 224])
         # print(torch.max(raw_image_sequence), torch.min(raw_image_sequence))
         if cfg.use_proprio:
             # Convert proprio to tensor so that it can be injected into latent later
             proprio_tensor = (
-                torch.from_numpy(proprio).reshape(batch_size, -1).to(dtype=torch.bfloat16).cuda()
+                torch.from_numpy(proprio).reshape(batch_size, -1).to(dtype=torch.bfloat16).to(device)
             )  # (B, proprio_dim)
             print(torch.max(proprio_tensor), torch.min(proprio_tensor))
         data_batch = {
             "dataset_name": "video_data",
             "video": raw_image_sequence,  # (B, C, T, H, W)
-            "t5_text_embeddings": text_embedding.repeat(batch_size, 1, 1).to(dtype=torch.bfloat16).cuda(),
+            "t5_text_embeddings": text_embedding.repeat(batch_size, 1, 1).to(dtype=torch.bfloat16).to(device),
             "fps": torch.tensor(
                 [16] * batch_size, dtype=torch.bfloat16
-            ).cuda(),  # Just match the training config (always 16 FPS)
+            ).to(device),  # Just match the training config (always 16 FPS)
             "padding_mask": torch.zeros(
                 (batch_size, 1, COSMOS_IMAGE_SIZE, COSMOS_IMAGE_SIZE), dtype=torch.bfloat16
-            ).cuda(),  # Padding mask (assume no padding here)
+            ).to(device),  # Padding mask (assume no padding here)
             "num_conditional_frames": model.config.min_num_conditional_frames,  # Number of latent frames used as conditioning
             "proprio": proprio_tensor if cfg.use_proprio else None,
             # Specify the indices of various elements in the latent diffusion sequence
             "current_proprio_latent_idx": (
-                torch.tensor([current_proprio_latent_idx] * batch_size, dtype=torch.int64).cuda()
+                torch.tensor([current_proprio_latent_idx] * batch_size, dtype=torch.int64).to(device)
                 if cfg.use_proprio
-                else torch.tensor([-1] * batch_size, dtype=torch.int64).cuda()
+                else torch.tensor([-1] * batch_size, dtype=torch.int64).to(device)
             ),
             "current_wrist_image_latent_idx": (
-                torch.tensor([current_wrist_image_latent_idx] * batch_size, dtype=torch.int64).cuda()
+                torch.tensor([current_wrist_image_latent_idx] * batch_size, dtype=torch.int64).to(device)
                 if cfg.use_wrist_image
-                else torch.tensor([-1] * batch_size, dtype=torch.int64).cuda()
+                else torch.tensor([-1] * batch_size, dtype=torch.int64).to(device)
             ),
             "current_wrist_image2_latent_idx": (
-                torch.tensor([current_wrist_image2_latent_idx] * batch_size, dtype=torch.int64).cuda()
+                torch.tensor([current_wrist_image2_latent_idx] * batch_size, dtype=torch.int64).to(device)
                 if cfg.use_wrist_image
-                else torch.tensor([-1] * batch_size, dtype=torch.int64).cuda()
+                else torch.tensor([-1] * batch_size, dtype=torch.int64).to(device)
             ),
             "current_image_latent_idx": (
-                torch.tensor([current_image_latent_idx] * batch_size, dtype=torch.int64).cuda()
+                torch.tensor([current_image_latent_idx] * batch_size, dtype=torch.int64).to(device)
                 if cfg.use_third_person_image
-                else torch.tensor([-1] * batch_size, dtype=torch.int64).cuda()
+                else torch.tensor([-1] * batch_size, dtype=torch.int64).to(device)
             ),
             "current_image2_latent_idx": (
-                torch.tensor([current_image2_latent_idx] * batch_size, dtype=torch.int64).cuda()
+                torch.tensor([current_image2_latent_idx] * batch_size, dtype=torch.int64).to(device)
                 if cfg.use_third_person_image and cfg.num_third_person_images == 2
-                else torch.tensor([-1] * batch_size, dtype=torch.int64).cuda()
+                else torch.tensor([-1] * batch_size, dtype=torch.int64).to(device)
             ),
-            "action_latent_idx": torch.tensor([action_latent_idx] * batch_size, dtype=torch.int64).cuda(),
+            "action_latent_idx": torch.tensor([action_latent_idx] * batch_size, dtype=torch.int64).to(device),
             "future_proprio_latent_idx": (
-                torch.tensor([future_proprio_latent_idx] * batch_size, dtype=torch.int64).cuda()
+                torch.tensor([future_proprio_latent_idx] * batch_size, dtype=torch.int64).to(device)
                 if cfg.use_proprio
-                else torch.tensor([-1] * batch_size, dtype=torch.int64).cuda()
+                else torch.tensor([-1] * batch_size, dtype=torch.int64).to(device)
             ),
             "future_wrist_image_latent_idx": (
-                torch.tensor([future_wrist_image_latent_idx] * batch_size, dtype=torch.int64).cuda()
+                torch.tensor([future_wrist_image_latent_idx] * batch_size, dtype=torch.int64).to(device)
                 if cfg.use_wrist_image
-                else torch.tensor([-1] * batch_size, dtype=torch.int64).cuda()
+                else torch.tensor([-1] * batch_size, dtype=torch.int64).to(device)
             ),
             "future_wrist_image2_latent_idx": (
-                torch.tensor([future_wrist_image2_latent_idx] * batch_size, dtype=torch.int64).cuda()
+                torch.tensor([future_wrist_image2_latent_idx] * batch_size, dtype=torch.int64).to(device)
                 if cfg.use_wrist_image and cfg.num_wrist_images == 2
-                else torch.tensor([-1] * batch_size, dtype=torch.int64).cuda()
+                else torch.tensor([-1] * batch_size, dtype=torch.int64).to(device)
             ),
             "future_image_latent_idx": (
-                torch.tensor([future_image_latent_idx] * batch_size, dtype=torch.int64).cuda()
+                torch.tensor([future_image_latent_idx] * batch_size, dtype=torch.int64).to(device)
                 if cfg.use_third_person_image
-                else torch.tensor([-1] * batch_size, dtype=torch.int64).cuda()
+                else torch.tensor([-1] * batch_size, dtype=torch.int64).to(device)
             ),
             "future_image2_latent_idx": (
-                torch.tensor([future_image2_latent_idx] * batch_size, dtype=torch.int64).cuda()
+                torch.tensor([future_image2_latent_idx] * batch_size, dtype=torch.int64).to(device)
                 if cfg.use_third_person_image and cfg.num_third_person_images == 2
-                else torch.tensor([-1] * batch_size, dtype=torch.int64).cuda()
+                else torch.tensor([-1] * batch_size, dtype=torch.int64).to(device)
             ),
             # "value_latent_idx": torch.tensor([value_latent_idx] * batch_size, dtype=torch.int64).cuda(),
-             "value_latent_idx": torch.tensor([value_latent_idx] * batch_size, dtype=torch.int64).cuda(),
+             "value_latent_idx": torch.tensor([value_latent_idx] * batch_size, dtype=torch.int64).to(device),
         }
 
         # Generate the output latent sequence - contains the predicted action chunk, future state, and value, but

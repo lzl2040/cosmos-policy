@@ -269,6 +269,8 @@ class PolicyEvalConfig:
     # fmt: on
     max_action_dim: int = 15
     max_state_dim: int = 15
+    
+    device: int = 0
 
 
 # Set up logging
@@ -409,6 +411,7 @@ def run_episode(
     resize_size,
     initial_state=None,
     log_file=None,
+    device = "cuda:0"
 ):
     """Run a single episode in the environment."""
     # Reset environment
@@ -519,6 +522,7 @@ def run_episode(
                             generate_future_state_and_value_in_parallel=not (
                                 cfg.ar_future_prediction or cfg.ar_value_prediction or cfg.ar_qvalue_prediction
                             ),
+                            device=device
                         )
                         query_time = time.time() - start_time
                         log_message(
@@ -723,6 +727,7 @@ def run_task(
     total_episodes=0,
     total_successes=0,
     log_file=None,
+    device="cuda:0"
 ):
     """Run evaluation for a single task."""
     # Get task
@@ -770,6 +775,7 @@ def run_task(
             resize_size,
             initial_state,
             log_file,
+            device
         )
 
         # Update counters
@@ -888,6 +894,7 @@ def eval_libero(cfg: PolicyEvalConfig) -> float:
     # Load Cosmos Policy dataset stats
     dataset_stats = load_dataset_stats_my(cfg.dataset_stats_path)
     # dataset_stats = load_dataset_stats(cfg.dataset_stats_path)
+    device = f"cuda:{cfg.device}"
 
     # If using parallel inference, initialize worker pool
     worker_pool = None
@@ -900,7 +907,7 @@ def eval_libero(cfg: PolicyEvalConfig) -> float:
 
     # If using serial inference, initialize model and Cosmos config
     else:
-        model, cosmos_config = get_model(cfg)
+        model, cosmos_config = get_model(cfg, device)
         assert cfg.chunk_size == cosmos_config.dataloader_train.dataset.chunk_size, (
             f"Mismatch found between train and test chunk sizes! Train: {cosmos_config.dataloader_train.dataset.chunk_size}, Test: {cfg.chunk_size}"
         )
@@ -980,6 +987,7 @@ def eval_libero(cfg: PolicyEvalConfig) -> float:
             total_episodes,
             total_successes,
             log_file,
+            device
         )
 
     # Calculate final success rate

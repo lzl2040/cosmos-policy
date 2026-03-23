@@ -51,7 +51,7 @@ uv run --no-sync --extra cu128 --group libero --python 3.10 \
     --use_wrist_image True \
     --use_proprio True \
     --use_third_person_image True \
-    --num_third_person_images 1 \
+    --num_third_person_images 2 \
     --normalize_proprio True \
     --unnormalize_actions True \
     --dataset_stats_path /mnt/wangxiaofa/cosmos_policy_exp/cosmos_policy/libero_stats.json \

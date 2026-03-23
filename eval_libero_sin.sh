@@ -41,7 +41,7 @@ while [[ $# -gt 0 ]]; do
 done
 export PATH=/home/aiscuser/.conda/envs/lerobot/bin:$PATH
 export LD_LIBRARY_PATH=/home/aiscuser/.conda/envs/lerobot/lib:$LD_LIBRARY_PATH
-export LIBERO_CONFIG_PATH=/mnt/wangxiaofa/cosmos_policy_exp/cosmos_policy/config.yaml
+export LIBERO_CONFIG_PATH=/mnt/wangxiaofa/cosmos_policy_exp/cosmos_policy
 # export COSMOS_SMOKE=1
 uv run --no-sync --extra cu128 --group libero --python 3.10 \
   python -m cosmos_policy.experiments.robot.libero.run_libero_eval \

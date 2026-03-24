@@ -4,6 +4,7 @@ BATCH_SIZE=4
 DATA_MIX="libero"
 STAGE="finetune"
 MAX_ACTION_DIM=32
+MAX_STATE_dIM=32
 
 # 解析命令行参数
 while [[ $# -gt 0 ]]; do
@@ -48,6 +49,10 @@ while [[ $# -gt 0 ]]; do
             MAX_ACTION_DIM="$2"
             shift 2
             ;;
+        --max_state_dim)
+            MAX_STATE_DIM="$2"
+            shift 2
+            ;;
         *)
             echo "未知参数: $1"
             exit 1
@@ -71,3 +76,4 @@ uv run --no-sync --extra cu128 --group libero --python 3.10 \
   dataloader_train.dataset.data_mix=$DATA_MIX \
   dataloader_train.dataset.stage=$STAGE \
   dataloader_train.dataset.max_action_dim=$MAX_ACTION_DIM
+  dataloader_train.dataset.max_state_dim=$MAX_STATE_DIM

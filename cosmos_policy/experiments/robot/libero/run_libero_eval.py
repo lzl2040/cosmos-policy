@@ -655,7 +655,8 @@ def run_episode(
                 best_future_predictions = best_return_dict[1]
                 best_value_predictions = best_return_dict[2]
                 # Use the best actions, future predictions, and value predictions found
-                action_queue.extend(best_actions)
+                # print(best_actions[0].shape) # 7
+                action_queue.extend(best_actions[:cfg.num_open_loop_steps])
                 future_image_predictions_list.append(best_future_predictions)
                 log_message(f"t={t}: Selected seed {best_seed} with value = {best_value_predictions:.4f}", log_file)
 
@@ -786,13 +787,14 @@ def run_task(
             total_successes += 1
 
         # Save replay video
-        save_rollout_video(
-            replay_images,
-            total_episodes,
-            success=success,
-            task_description=task_description,
-            log_file=log_file,
-        )
+        if not success or task_successes % 10 == 0:
+            save_rollout_video(
+                replay_images,
+                total_episodes,
+                success=success,
+                task_description=task_description,
+                log_file=log_file,
+            )
 
         # Save replay video with future image predictions included
         future_primary_image_predictions = None
@@ -801,19 +803,21 @@ def run_task(
         future_wrist_image_predictions = None
         if cfg.use_wrist_image:
             future_wrist_image_predictions = [x["future_wrist_image"] for x in future_image_predictions_list]
-        save_rollout_video_with_future_image_predictions(
-            replay_images,
-            total_episodes,
-            success=success,
-            task_description=task_description,
-            chunk_size=cfg.chunk_size,
-            num_open_loop_steps=cfg.num_open_loop_steps,
-            rollout_wrist_images=replay_wrist_images,
-            future_primary_image_predictions=future_primary_image_predictions,
-            future_wrist_image_predictions=future_wrist_image_predictions,
-            log_file=log_file,
-            show_diff=False,
-        )
+        
+        if not success or task_successes % 10 == 0:
+            save_rollout_video_with_future_image_predictions(
+                replay_images,
+                total_episodes,
+                success=success,
+                task_description=task_description,
+                chunk_size=cfg.chunk_size,
+                num_open_loop_steps=cfg.num_open_loop_steps,
+                rollout_wrist_images=replay_wrist_images,
+                future_primary_image_predictions=future_primary_image_predictions,
+                future_wrist_image_predictions=future_wrist_image_predictions,
+                log_file=log_file,
+                show_diff=False,
+            )
 
         # Save episodic data (in data collection mode)
         if cfg.data_collection and collected_data is not None:
@@ -972,6 +976,8 @@ def eval_libero(cfg: PolicyEvalConfig) -> float:
     # Start evaluation
     total_episodes, total_successes = 0, 0
     for task_id in tqdm.tqdm(range(num_tasks)):
+        # if task_id != 2:
+        #     continue
         (
             total_episodes,
             total_successes,
@@ -1026,4 +1032,5 @@ def eval_libero(cfg: PolicyEvalConfig) -> float:
 
 
 if __name__ == "__main__":
+    # print(os.path.expanduser("~/.libero"))
     eval_libero()

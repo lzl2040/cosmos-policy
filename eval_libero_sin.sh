@@ -4,6 +4,7 @@ TASK_SUITE=""
 NUM_PER_TASK=20
 MAX_ACTION_DIM=7
 MAX_STATE_DIM=8
+ACTION_STEP=16
 
 # 解析命令行参数
 while [[ $# -gt 0 ]]; do
@@ -33,6 +34,10 @@ while [[ $# -gt 0 ]]; do
             MAX_STATE_DIM="$2"
             shift 2
             ;;
+        --action_step)
+            ACTION_STEP="$2"
+            shift 2
+            ;;
         *)
             echo "未知参数: $1"
             exit 1
@@ -58,7 +63,7 @@ uv run --no-sync --extra cu128 --group libero --python 3.10 \
     --t5_text_embeddings_path /mnt/wangxiaofa/cosmos_policy_exp/cosmos_policy/t5_embeddings_libero.pkl \
     --trained_with_image_aug True \
     --chunk_size 16 \
-    --num_open_loop_steps 16 \
+    --num_open_loop_steps $ACTION_STEP \
     --task_suite_name $TASK_SUITE \
     --num_trials_per_task $NUM_PER_TASK \
     --device 0 \

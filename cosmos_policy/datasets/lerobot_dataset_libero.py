@@ -1447,8 +1447,8 @@ class MultiDatasetforDistTraining(torch.utils.data.Dataset):
     def norm_data_with_quantile(self, item):
         # key1 = "min"
         # key2 = "max"
-        key1 = "q01"
-        key2 = "q99"
+        key1 = "min"
+        key2 = "max"
         state_q01 = torch.ones(self.max_state_dim) * -1
         state_q99 = torch.ones(self.max_state_dim)
         action_q01 = torch.ones(self.max_action_dim) * -1

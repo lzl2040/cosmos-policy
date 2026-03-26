@@ -25,6 +25,7 @@ import pickle
 
 import transformers
 from transformers.trainer_pt_utils import LabelSmoother
+from torchvision.transforms import v2
 
 IGNORE_TOKEN_ID = LabelSmoother.ignore_index
 
@@ -1273,11 +1274,15 @@ class MultiDatasetforDistTraining(torch.utils.data.Dataset):
                     repo_id = f"bulldog-{dataset_name}" # any
                     ds_meta = LeRobotDatasetMetadata(repo_id, root=data_root)
                     delta_timestamps = resolve_delta_timestamps(ds_meta, chunk_size)
+                    if self.stage == "pretrain":
+                        image_transforms = v2.Resize((final_image_size, final_image_size))
+                    else:
+                        image_transforms = None
                     dataset = LeRobotDataset(
                         repo_id, 
                         root=data_root,
                         delta_timestamps=delta_timestamps,
-                        image_transforms=None,
+                        image_transforms=image_transforms,
                         wrist_image_transforms=None,
                         video_backend="torchcodec",
                         dataset_name=dataset_name,
@@ -1334,6 +1339,7 @@ class MultiDatasetforDistTraining(torch.utils.data.Dataset):
             self.full_dataset = ConcatDataset(self.datasets)
             self.dataset_len = len(self.full_dataset)
         
+        print(f"Dataset Len:{self.dataset_len}")
         # 4. Aggregate dataset stats from all datasets
         self.stats = aggregate_stats([dataset.meta.stats for dataset in self.datasets], 
                                      max_dims = {"action": max_action_dim, "observation.state": max_state_dim})
@@ -1408,6 +1414,7 @@ class MultiDatasetforDistTraining(torch.utils.data.Dataset):
             rng.shuffle(order)
             self._step_order[dataset_index] = order
             step_pos = 0
+            self.epoch += 1
 
         single_step_index = self._step_order[dataset_index][step_pos]
         # print(f"Single step:{single_step_index}")

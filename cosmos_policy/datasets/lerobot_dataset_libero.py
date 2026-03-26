@@ -1268,24 +1268,25 @@ class MultiDatasetforDistTraining(torch.utils.data.Dataset):
             if dataset_name in vla2data_root.keys():
                 data_root = vla2data_root[dataset_name]
                 data_root = os.path.join(parent_dir, data_root)
-                print(f"Load data from {data_root}")
-                repo_id = f"bulldog-{dataset_name}" # any
-                ds_meta = LeRobotDatasetMetadata(repo_id, root=data_root)
-                delta_timestamps = resolve_delta_timestamps(ds_meta, chunk_size)
-                dataset = LeRobotDataset(
-                    repo_id, 
-                    root=data_root,
-                    delta_timestamps=delta_timestamps,
-                    image_transforms=None,
-                    wrist_image_transforms=None,
-                    video_backend="torchcodec",
-                    dataset_name=dataset_name,
-                )
-                self.num_episodes += dataset.num_episodes
-                self.num_frames += dataset.num_frames
-                self.datasets.append(dataset)
-                self.dataset_sizes.append(len(dataset))
-                self.dataset_names.append(dataset_name)
+                if os.path.exists(data_root):
+                    print(f"Load data from {data_root}")
+                    repo_id = f"bulldog-{dataset_name}" # any
+                    ds_meta = LeRobotDatasetMetadata(repo_id, root=data_root)
+                    delta_timestamps = resolve_delta_timestamps(ds_meta, chunk_size)
+                    dataset = LeRobotDataset(
+                        repo_id, 
+                        root=data_root,
+                        delta_timestamps=delta_timestamps,
+                        image_transforms=None,
+                        wrist_image_transforms=None,
+                        video_backend="torchcodec",
+                        dataset_name=dataset_name,
+                    )
+                    self.num_episodes += dataset.num_episodes
+                    self.num_frames += dataset.num_frames
+                    self.datasets.append(dataset)
+                    self.dataset_sizes.append(len(dataset))
+                    self.dataset_names.append(dataset_name)
             else:
                 print(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] - {dataset_name} not found in vla2root.json, skipping...")
 
@@ -1348,8 +1349,10 @@ class MultiDatasetforDistTraining(torch.utils.data.Dataset):
             t5_text_embeddings_path = os.path.join(parent_dir, f"t5_embeddings_{data_mix}.pkl")
         else:
             t5_text_embeddings_path = os.path.join(parent_dir, f"t5_embeddings_pretrain.pkl")
-        with open(t5_text_embeddings_path, "rb") as file:
-            self.t5_text_embeddings = pickle.load(file)
+        if os.path.exists(t5_text_embeddings_path):
+            with open(t5_text_embeddings_path, "rb") as file:
+                self.t5_text_embeddings = pickle.load(file)
+        self.t5_text_embeddings_dir = os.path.join(parent_dir, "t5_embeddings")
         
         # other property
         self.use_proprio = use_proprio
@@ -1501,12 +1504,21 @@ class MultiDatasetforDistTraining(torch.utils.data.Dataset):
         else:
             item = self.full_dataset[index]
         
+        task_id = item["task_index"].item()
+        dataset_name = item["dataset_name"]
+        if self.stage == "pretrain":
+            task_embeddings_path = os.path.join(self.t5_text_embeddings_dir, dataset_name, f"task_{task_id}.npy")
+            task_embeddings = torch.squeeze(torch.from_numpy(np.load(task_embeddings_path)))
+            # print(task_embeddings.shape)
+        else:
+            task_embeddings = torch.squeeze(self.t5_text_embeddings[item["task"]])
+        
         # prepare state and action
         item = self.prepare_action_state(item)
         item = self.norm_data_with_quantile(item) # follow cosmos policy
         
         # unified the image keys
-        dataset_name = item["dataset_name"]
+        
         data_config = OXE_DATASET_CONFIGS[dataset_name]
         image_obs_keys = data_config["image_obs_keys"] # contain new_key: old_key mapping, such as "primary": "image", ...
         key_to_pad = []
@@ -1567,11 +1579,11 @@ class MultiDatasetforDistTraining(torch.utils.data.Dataset):
             current_sequence_idx += 1
             
             current_image2_latent_idx = -1
-            # current_secondary_image = item[IMAGE_SECOND][CURRENT_IDX]
-            # current_secondary_image = duplicate_array(current_secondary_image, total_num_copies=self.num_duplicates_per_image)
-            # image_list.append(current_secondary_image)
-            # current_image2_latent_idx = current_sequence_idx
-            # current_sequence_idx += 1
+            current_secondary_image = item[IMAGE_SECOND][CURRENT_IDX]
+            current_secondary_image = duplicate_array(current_secondary_image, total_num_copies=self.num_duplicates_per_image)
+            image_list.append(current_secondary_image)
+            current_image2_latent_idx = current_sequence_idx
+            current_sequence_idx += 1
             
         # Add blank image for action chunk
         blank_image = np.zeros_like(item[IMAGE_PRIMARY][CURRENT_IDX])
@@ -1613,11 +1625,11 @@ class MultiDatasetforDistTraining(torch.utils.data.Dataset):
 
             
             future_image2_latent_idx = -1
-            # future_secondary_image = item[IMAGE_SECOND][FUTURE_IDX]
-            # future_secondary_image = duplicate_array(future_secondary_image, total_num_copies=self.num_duplicates_per_image)
-            # image_list.append(future_secondary_image)
-            # future_image2_latent_idx = current_sequence_idx
-            # current_sequence_idx += 1
+            future_secondary_image = item[IMAGE_SECOND][FUTURE_IDX]
+            future_secondary_image = duplicate_array(future_secondary_image, total_num_copies=self.num_duplicates_per_image)
+            image_list.append(future_secondary_image)
+            future_image2_latent_idx = current_sequence_idx
+            current_sequence_idx += 1
         
         # Stack images and preprocess
         images = np.concatenate(image_list, axis=0)
@@ -1639,7 +1651,7 @@ class MultiDatasetforDistTraining(torch.utils.data.Dataset):
         sample_dict = {
             "video": images,
             "actions": action_chunk,
-            "t5_text_embeddings": torch.squeeze(self.t5_text_embeddings[item["task"]]),
+            "t5_text_embeddings": task_embeddings,
             "t5_text_mask": torch.ones(512, dtype=torch.int64),  # Just copying what others have done in this codebase
             "fps": 16,  # Just set to some fixed value since we aren't generating videos anyway
             "padding_mask": torch.zeros(

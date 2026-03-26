@@ -5,6 +5,7 @@ import json
 import copy
 import os
 import shutil
+import cv2
 import polars as pl
 from pathlib import Path
 from typing import Callable, Dict
@@ -897,6 +898,9 @@ class LeRobotDataset(torch.utils.data.Dataset):
             padded_img = padded_img.squeeze(1)
         return padded_img
     
+    
+    def resize_numpy(self, img):
+        return cv2.resize(img, (224, 224), interpolation=cv2.INTER_LINEAR)
 
     def __getitem__(self, idx) -> dict:
         # print(f"Idx:{idx}")
@@ -921,7 +925,9 @@ class LeRobotDataset(torch.utils.data.Dataset):
         if self.image_transforms is not None:
             image_keys = self.meta.camera_keys
             for cam in image_keys:
-                item[cam] = self.image_transforms(item[cam])
+                item[cam] = [self.resize_numpy(img) for img in item[cam]]
+                # item[cam] = self.image_transforms(item[cam])
+                # print(item[cam][0].shape, self.image_transforms)
         # Add task as a string
         task_idx = item["task_index"].item()
         item["task"] = self.meta.tasks[task_idx]
@@ -1531,6 +1537,7 @@ class MultiDatasetforDistTraining(torch.utils.data.Dataset):
         key_to_pad = []
         for new_key, old_key in image_obs_keys.items():
             if old_key != None:
+                # print(item[f"observation.images.{old_key}"][0].shape)
                 item[f"observation.images.{new_key}"] = copy.deepcopy(item[f"observation.images.{old_key}"])
                 exist_image = item[f"observation.images.{old_key}"]
                 if new_key != old_key:

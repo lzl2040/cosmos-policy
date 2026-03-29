@@ -69,6 +69,7 @@ def launch(config: Config, args: argparse.Namespace) -> None:
             rank=parallel_state.get_data_parallel_rank(),
             shuffle=True,
             seed=0,
+            drop_last=True
         )
         dataloader_train = DataLoader(
             dataset=dataset,

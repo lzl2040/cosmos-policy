@@ -66,6 +66,12 @@ uv run --no-sync --extra cu128 --group libero --python 3.10 \
     python test_ffmpeg.py
 # export BASE_DATASETS_DIR="/home/cosmos/.cache/datasets"
 # export IMAGINAIRE_OUTPUT_ROOT="/home/cosmos/.cache/imaginaire_output"
+export NCCL_IB_DISABLE=1
+export NCCL_P2P_DISABLE=1
+export NCCL_SHM_DISABLE=1
+# export NCCL_SOCKET_IFNAME=eth0
+export NCCL_DEBUG=INFO
+export TORCH_DISTRIBUTED_DEBUG=DETAIL
 uv run --no-sync --extra cu128 --group libero --python 3.10 \
   torchrun --nnodes=$NNODES --nproc_per_node=$NPROC_PER_NODE --node_rank=$NODE_RANK --master_addr=$MASTER_ADDR --master_port=$MASTER_PORT \
   -m cosmos_policy.scripts.train \

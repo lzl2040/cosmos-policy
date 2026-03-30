@@ -142,6 +142,7 @@ class CosmosPolicyTrainer(ImaginaireTrainer):
                         continue
                     # Do the following when an actual optimizer (update) step has been made.
                     iteration += 1
+                    print(f"Iteration {iteration} completed.")
                     if iteration < 610:
                         continue
                     # Save checkpoint.

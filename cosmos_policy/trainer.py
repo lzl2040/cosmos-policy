@@ -133,9 +133,10 @@ class CosmosPolicyTrainer(ImaginaireTrainer):
                         iteration=iteration,
                         grad_accum_iter=grad_accum_iter,
                     )
-                    self.callbacks.on_training_step_batch_end(
-                        model, data_batch, output_batch, loss, iteration=iteration
-                    )
+                    if iteration >= 610:
+                        self.callbacks.on_training_step_batch_end(
+                            model, data_batch, output_batch, loss, iteration=iteration
+                        )
                     # If the gradients are still being accumulated, continue to load the next training batch.
                     if grad_accum_iter != 0:
                         continue

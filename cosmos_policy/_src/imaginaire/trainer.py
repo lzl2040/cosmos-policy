@@ -289,6 +289,8 @@ class ImaginaireTrainer:
             loss (torch.Tensor): The total loss of the training data batch.
         """
         # Only let DDP sync gradient at the last iteration of the gradient accumulation window
+        output_batch = None
+        loss = 0
         if iteration >= 610:
             with distributed.ddp_sync_grad(model_ddp, grad_accum_iter == self.config.trainer.grad_accum_iter - 1):
                 self.callbacks.on_before_forward(iteration=iteration)

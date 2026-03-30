@@ -109,6 +109,7 @@ class CosmosPolicyTrainer(ImaginaireTrainer):
                         break
                     finally:
                         self.callbacks.on_after_dataloading(iteration)
+                    # print(epoch)
                     # If max_iter is reached, exit the training loop.
                     if iteration >= self.config.trainer.max_iter:
                         _end_training = True
@@ -140,6 +141,8 @@ class CosmosPolicyTrainer(ImaginaireTrainer):
                         continue
                     # Do the following when an actual optimizer (update) step has been made.
                     iteration += 1
+                    if iteration < 610:
+                        continue
                     # Save checkpoint.
                     if iteration % self.config.checkpoint.save_iter == 0:
                         self.checkpointer.save(model, optimizer, scheduler, grad_scaler, iteration=iteration)

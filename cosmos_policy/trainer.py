@@ -133,18 +133,18 @@ class CosmosPolicyTrainer(ImaginaireTrainer):
                         iteration=iteration,
                         grad_accum_iter=grad_accum_iter,
                     )
-                    if iteration >= 610:
-                        self.callbacks.on_training_step_batch_end(
-                            model, data_batch, output_batch, loss, iteration=iteration
-                        )
+                    # if iteration >= 610:
+                    self.callbacks.on_training_step_batch_end(
+                        model, data_batch, output_batch, loss, iteration=iteration
+                    )
                     # If the gradients are still being accumulated, continue to load the next training batch.
                     if grad_accum_iter != 0:
                         continue
                     # Do the following when an actual optimizer (update) step has been made.
                     iteration += 1
-                    print(f"Iteration {iteration} completed.")
-                    if iteration < 610:
-                        continue
+                    # print(f"Iteration {iteration} completed.")
+                    # if iteration < 610:
+                    #     continue
                     # Save checkpoint.
                     if iteration % self.config.checkpoint.save_iter == 0:
                         self.checkpointer.save(model, optimizer, scheduler, grad_scaler, iteration=iteration)

@@ -77,7 +77,7 @@ cosmos_predict2_2b_480p_libero = LazyDict(
         defaults=[
             "/experiment/Stage-c_pt_4-Index-102-Size-2B-Res-480-Fps-16-Note-HQ_V5_from_26",
             {"override /data_train": "mock"},
-            {"override /model": "policy_ddp"},
+            {"override /model": "policy_fsdp"},
             {"override /tokenizer": "policy_wan2pt1_tokenizer"},
             {
                 "override /callbacks": [
@@ -177,7 +177,7 @@ cosmos_predict2_2b_480p_libero = LazyDict(
             ),
         ),
         dataloader_train=L(DataLoader)(
-            num_workers=12,
+            num_workers=6,
             persistent_workers=True,
             pin_memory=True,
             dataset=libero_all_4_suites_dataset,

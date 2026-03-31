@@ -1420,7 +1420,7 @@ class MultiDatasetforDistTraining(torch.utils.data.Dataset):
             rng.shuffle(order)
             self._step_order[dataset_index] = order
             step_pos = 0
-            self.epoch += 1
+            # self.epoch += 1
 
         single_step_index = self._step_order[dataset_index][step_pos]
         # print(f"Single step:{single_step_index}")

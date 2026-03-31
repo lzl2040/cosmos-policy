@@ -345,8 +345,8 @@ class ImaginaireTrainer:
                 print(traceback.format_exc(), flush=True)
 
                 # 可选：看输入里有没有 NaN/Inf
-                if isinstance(input_batch, dict):
-                    for k, v in input_batch.items():
+                if isinstance(data, dict):
+                    for k, v in data.items():
                         if torch.is_tensor(v):
                             print(
                                 f"[rank {rank}] batch[{k}] shape={tuple(v.shape)} "

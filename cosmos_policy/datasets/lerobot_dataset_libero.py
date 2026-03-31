@@ -84,6 +84,27 @@ from tabulate import tabulate
 
 CODEBASE_VERSION = "v2.1"
 
+class IndexedDataset(Dataset):
+    def __init__(self, dataset, indices):
+        self.dataset = dataset
+        self.indices = np.asarray(indices, dtype=np.int64)
+
+    def __len__(self):
+        return len(self.indices)
+
+    def __getitem__(self, idx):
+        return self.dataset[int(self.indices[idx])]
+
+
+def allocate_samples_by_weights(weights, total_size):
+    weights = np.asarray(weights, dtype=np.float64)
+    weights = weights / weights.sum()
+
+    raw_counts = weights * total_size
+    counts = np.floor(raw_counts).astype(int)
+
+    return counts
+
 def tensor_to_list(obj):
     """
     递归地将包含 torch.Tensor 的结构转换为纯 Python 数据结构。
@@ -1246,7 +1267,8 @@ class MultiDatasetforDistTraining(torch.utils.data.Dataset):
             vla2root_json: str = "vla2root.json",
             balance_dataset_weights: bool = True,
             max_action_dim: int = 32,
-            max_state_dim: int = 32
+            max_state_dim: int = 32,
+            dataset_len_one_epoch = 5000_0000
         ):
         super().__init__()
         self.seed = seed
@@ -1324,23 +1346,21 @@ class MultiDatasetforDistTraining(torch.utils.data.Dataset):
         else:
             self._dataset_sampling_weights /= weights_sum
         
-        table_data = [
-            [self.dataset_names[i], len(self.datasets[i]), f"{self._dataset_sampling_weights[i]:.4f}"]
-                for i in range(len(self.datasets))
-        ]
-        print(tabulate(table_data, headers=["Dataset", "Frames", "Ratio"], tablefmt="grid"))
-        print(f"Total frames: {self._dataset_lengths.sum()}")
+        # table_data = [
+        #     [self.dataset_names[i], len(self.datasets[i]), f"{self._dataset_sampling_weights[i]:.4f}"]
+        #         for i in range(len(self.datasets))
+        # ]
+        # print(tabulate(table_data, headers=["Dataset", "Frames", "Ratio"], tablefmt="grid"))
+        # print(f"Total frames: {self._dataset_lengths.sum()}")
         
         if self.stage == "pretrain":
-            # 4. prepare dataset indicies for sampling
-            # self._step_order: list[np.ndarray] = []
-            # self._step_pos: list[int] = []
-            # for dataset in self.datasets:
-            #     self._step_order.append(np.arange(len(dataset)))
-            #     rng = np.random.default_rng(self.seed)
-            #     rng.shuffle(self._step_order[-1])
-            #     self._step_pos.append(0)
-            self.dataset_len = np.max(self._dataset_lengths)
+            print(f"Building pretrain dataset with target size {dataset_len_one_epoch}...")
+            self.target_size = dataset_len_one_epoch   # 例如固定 5w
+            self.full_dataset = self.build_pretrain_dataset(
+                target_size=self.target_size,
+                seed=self.seed
+            )
+            self.dataset_len = len(self.full_dataset)
         else:
             self.full_dataset = ConcatDataset(self.datasets)
             self.dataset_len = len(self.full_dataset)
@@ -1377,7 +1397,52 @@ class MultiDatasetforDistTraining(torch.utils.data.Dataset):
         self.use_stronger_image_aug = use_stronger_image_aug
         self.max_action_dim = max_action_dim
         self.max_state_dim = max_state_dim
-        
+    
+    
+    def build_pretrain_dataset(self, target_size, seed=0):
+        rng = np.random.default_rng(seed)
+
+        sample_counts = allocate_samples_by_weights(
+            self._dataset_sampling_weights,
+            target_size
+        )
+
+        sampled_subsets = []
+        sampled_table = []
+
+        for i, (dataset, count) in enumerate(zip(self.datasets, sample_counts)):
+            ds_name = self.dataset_names[i]
+            ds_len = len(dataset)
+
+            if ds_len == 0:
+                print(f"Warning: {ds_name} is empty, skip.")
+                continue
+
+            if count <= 0:
+                print(f"Info: {ds_name} sampled count is 0, skip.")
+                continue
+
+            # 有放回采样
+            indices = rng.integers(0, ds_len, size=count)
+
+            subset = IndexedDataset(dataset, indices)
+            sampled_subsets.append(subset)
+
+            sampled_table.append([
+                ds_name,
+                ds_len,
+                count,
+                f"{count / target_size:.4f}"
+            ])
+
+        print(tabulate(
+            sampled_table,
+            headers=["Dataset", "Original Frames", "Sampled Frames", "Ratio"],
+            tablefmt="grid"
+        ))
+        print(f"Total sampled frames: {sum(len(x) for x in sampled_subsets)}")
+
+        return ConcatDataset(sampled_subsets)
         
     def pad_vector(self, vector, new_dim):
         """Can be (batch_size x sequence_length x features_dimension)
@@ -1527,10 +1592,10 @@ class MultiDatasetforDistTraining(torch.utils.data.Dataset):
     
     def __getitem__(self, index):
         # every item key contains t-t+chunk_size elements (large than episode length use repeat last)
-        if self.stage == "pretrain":
-            item = self.sample_step(index)
-        else:
-            item = self.full_dataset[index]
+        # if self.stage == "pretrain":
+        #     item = self.sample_step(index)
+        # else:
+        item = self.full_dataset[index]
         
         task_id = item["task_index"].item()
         dataset_name = item["dataset_name"]

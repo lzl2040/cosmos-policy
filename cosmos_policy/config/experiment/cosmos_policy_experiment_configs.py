@@ -69,14 +69,15 @@ libero_all_4_suites_dataset = L(MultiDatasetforDistTraining)(
     vla2root_json="vla2root.json",
     balance_dataset_weights=True,
     max_action_dim=16,
-    max_state_dim=16
+    max_state_dim=16,
+    dataset_len_one_epoch=5000
 )
 cosmos_predict2_2b_480p_libero = LazyDict(
     dict(
         defaults=[
             "/experiment/Stage-c_pt_4-Index-102-Size-2B-Res-480-Fps-16-Note-HQ_V5_from_26",
             {"override /data_train": "mock"},
-            {"override /model": "policy_fsdp"},
+            {"override /model": "policy_ddp"},
             {"override /tokenizer": "policy_wan2pt1_tokenizer"},
             {
                 "override /callbacks": [

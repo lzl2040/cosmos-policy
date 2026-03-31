@@ -104,6 +104,11 @@ OXE_NAMED_MIXTURES: Dict[str, List[Tuple[str, float]]] = {
         ("berkeley_fanuc_manipulation", 2.0),
         ("cmu_stretch", 1.0),
     ],
+    
+    "berkeley_autolab_ur5": [
+        ("berkeley_autolab_ur5", 2.0),
+        ("taco_play", 2.0),
+    ],
 
     # === Open-X Magic Soup++ ===
     "oxe_magic_soup_plus": [
@@ -305,11 +310,11 @@ OXE_NAMED_MIXTURES: Dict[str, List[Tuple[str, float]]] = {
         ("viola", 2.0),
         ("berkeley_autolab_ur5", 2.0),
         ("toto", 1.0),
-        # ("berkeley_cable_routing", 1.0),
+        ("berkeley_cable_routing", 1.0),
         ("roboturk", 2.0),
-        # ("stanford_hydra_dataset_converted_externally_to_rlds", 2.0),
+        ("stanford_hydra_dataset_converted_externally_to_rlds", 2.0),
         ("taco_play", 2.0),
-        ("rh20t", 1.0)
+        # ("rh20t", 1.0)
      ],
      "fractal_only": [
          ("fractal20220817_data", 1.0), 

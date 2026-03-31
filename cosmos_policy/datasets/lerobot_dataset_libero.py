@@ -1333,13 +1333,13 @@ class MultiDatasetforDistTraining(torch.utils.data.Dataset):
         
         if self.stage == "pretrain":
             # 4. prepare dataset indicies for sampling
-            self._step_order: list[np.ndarray] = []
-            self._step_pos: list[int] = []
-            for dataset in self.datasets:
-                self._step_order.append(np.arange(len(dataset)))
-                rng = np.random.default_rng(self.seed)
-                rng.shuffle(self._step_order[-1])
-                self._step_pos.append(0)
+            # self._step_order: list[np.ndarray] = []
+            # self._step_pos: list[int] = []
+            # for dataset in self.datasets:
+            #     self._step_order.append(np.arange(len(dataset)))
+            #     rng = np.random.default_rng(self.seed)
+            #     rng.shuffle(self._step_order[-1])
+            #     self._step_pos.append(0)
             self.dataset_len = np.max(self._dataset_lengths)
         else:
             self.full_dataset = ConcatDataset(self.datasets)
@@ -1404,27 +1404,42 @@ class MultiDatasetforDistTraining(torch.utils.data.Dataset):
         """
         self.epoch = epoch
     
-    def sample_step(self, index: int):
+    # def sample_step(self, index: int):
+    #     seed = safe_hash((self.epoch, index, self.seed))
+    #     rng = np.random.default_rng(seed)
+
+    #     # Sample dataset
+    #     dataset_index = rng.choice(len(self.datasets), p=self._dataset_sampling_weights)
+    #     dataset = self.datasets[dataset_index]
+    #     step_pos = self._step_pos[dataset_index]
+    #     # re-update
+    #     if step_pos >= len(dataset):
+    #         order = np.arange(len(dataset))
+    #         seed = safe_hash((self.epoch, dataset_index, self.seed, step_pos))
+    #         rng = np.random.default_rng(seed)
+    #         rng.shuffle(order)
+    #         self._step_order[dataset_index] = order
+    #         step_pos = 0
+    #         # self.epoch += 1
+
+    #     single_step_index = self._step_order[dataset_index][step_pos]
+    #     # print(f"Single step:{single_step_index}")
+    #     self._step_pos[dataset_index] = step_pos + 1
+    #     return dataset[int(single_step_index)]
+    
+    def sample_step(self, index):
         seed = safe_hash((self.epoch, index, self.seed))
         rng = np.random.default_rng(seed)
 
-        # Sample dataset
-        dataset_index = rng.choice(len(self.datasets), p=self._dataset_sampling_weights)
-        dataset = self.datasets[dataset_index]
-        step_pos = self._step_pos[dataset_index]
-        # re-update
-        if step_pos >= len(dataset):
-            order = np.arange(len(dataset))
-            seed = safe_hash((self.epoch, dataset_index, self.seed, step_pos))
-            rng = np.random.default_rng(seed)
-            rng.shuffle(order)
-            self._step_order[dataset_index] = order
-            step_pos = 0
-            # self.epoch += 1
+        dataset_index = rng.choice(
+            len(self.datasets),
+            p=self._dataset_sampling_weights
+        )
 
-        single_step_index = self._step_order[dataset_index][step_pos]
-        # print(f"Single step:{single_step_index}")
-        self._step_pos[dataset_index] = step_pos + 1
+        dataset = self.datasets[dataset_index]
+
+        single_step_index = rng.integers(len(dataset))
+
         return dataset[int(single_step_index)]
     
     def prepare_action_state(self, item):

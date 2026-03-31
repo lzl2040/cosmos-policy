@@ -309,7 +309,7 @@ class ImaginaireTrainer:
                     # if iteration > 600 and iteration <= 650:
                     #     print(f"Iteration {iteration}, grad_accum_iter {grad_accum_iter}, loss_scaled {loss_scaled.item()}")
                     # if not torch.isnan(loss_scaled):
-                    #     loss_scaled.backward()
+                    loss_scaled.backward()
                     if self.config.trainer.distributed_parallelism == "ddp":
                         model_ddp.module.on_after_backward()
                     else:

@@ -1743,6 +1743,7 @@ class MultiDatasetforDistTraining(torch.utils.data.Dataset):
         # print(self.t5_text_embeddings.keys(), item["task"])
         # print(self.t5_text_embeddings[item["task"]].shape) # 1 512 1024
         sample_dict = {
+            "dataset_name": dataset_name,
             "video": images,
             "actions": action_chunk,
             "t5_text_embeddings": task_embeddings,

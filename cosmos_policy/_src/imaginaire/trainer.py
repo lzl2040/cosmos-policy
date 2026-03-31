@@ -306,10 +306,10 @@ class ImaginaireTrainer:
                     "bwd", self.config.trainer.straggler_detection.analyze_backward
                 ):
                     loss_scaled = grad_scaler.scale(loss / self.config.trainer.grad_accum_iter)
-                    if iteration > 600 and iteration <= 650:
-                        print(f"Iteration {iteration}, grad_accum_iter {grad_accum_iter}, loss_scaled {loss_scaled.item()}")
-                    if not torch.isnan(loss_scaled):
-                        loss_scaled.backward()
+                    # if iteration > 600 and iteration <= 650:
+                    #     print(f"Iteration {iteration}, grad_accum_iter {grad_accum_iter}, loss_scaled {loss_scaled.item()}")
+                    # if not torch.isnan(loss_scaled):
+                    #     loss_scaled.backward()
                     if self.config.trainer.distributed_parallelism == "ddp":
                         model_ddp.module.on_after_backward()
                     else:

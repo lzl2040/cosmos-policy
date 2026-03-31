@@ -1324,7 +1324,7 @@ class MultiDatasetforDistTraining(torch.utils.data.Dataset):
                 print(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] - {dataset_name} not found in vla2root.json, skipping...")
 
         # 2. Set properties for sampling
-        self.set_epoch(0)
+        # self.set_epoch(0)
         self.balance_dataset_weights = balance_dataset_weights
         self._dataset_lengths = np.array([len(dataset) for dataset in self.datasets])
         

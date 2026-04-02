@@ -6,6 +6,7 @@ STAGE="finetune"
 MAX_ACTION_DIM=32
 MAX_STATE_dIM=32
 DATASET_LEN=5000_0000
+ACC_STEP=2
 
 # 解析命令行参数
 while [[ $# -gt 0 ]]; do
@@ -58,6 +59,10 @@ while [[ $# -gt 0 ]]; do
             DATASET_LEN="$2"
             shift 2
             ;;
+        --acc_step)
+            ACC_STEP="$2"
+            shift 2
+            ;;
         *)
             echo "未知参数: $1"
             exit 1
@@ -79,7 +84,7 @@ uv run --no-sync --extra cu128 --group libero --python 3.10 \
   -m cosmos_policy.scripts.train \
   --config=cosmos_policy/config/config.py --job_name=$JOB_NAME -- \
   experiment="cosmos_predict2_2b_480p_libero" \
-  trainer.grad_accum_iter=8 \
+  trainer.grad_accum_iter=$ACC_STEP \
   dataloader_train.batch_size=$BATCH_SIZE \
   dataloader_train.dataset.data_mix=$DATA_MIX \
   dataloader_train.dataset.stage=$STAGE \

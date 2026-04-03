@@ -71,8 +71,8 @@ class EveryN(Callback):
                 self.every_n_impl(trainer, model, data_batch, output_batch, loss, iteration, dataloader_len)
                 log.debug(f"Callback {self.__class__.__name__} finished on train_batch_end step {global_step}")
                 # add necessary barrier to avoid timeout
-                # if self.barrier_after_run:
-                #     distributed.barrier()
+                if self.barrier_after_run:
+                    distributed.barrier()
 
     @abstractmethod
     def every_n_impl(

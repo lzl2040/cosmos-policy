@@ -1384,7 +1384,7 @@ class MultiDatasetforDistTraining(torch.utils.data.Dataset):
         if os.path.exists(t5_text_embeddings_path):
             with open(t5_text_embeddings_path, "rb") as file:
                 self.t5_text_embeddings = pickle.load(file)
-        self.t5_text_embeddings_dir = os.path.join(parent_dir, "t5_embeddings")
+        self.t5_text_embeddings_dir = os.path.join("Data", "t5_embeddings")
         
         # other property
         self.use_proprio = use_proprio
@@ -1600,10 +1600,10 @@ class MultiDatasetforDistTraining(torch.utils.data.Dataset):
         task_id = item["task_index"].item()
         dataset_name = item["dataset_name"]
         if self.stage == "pretrain":
-            # task_embeddings_path = os.path.join(self.t5_text_embeddings_dir, dataset_name, f"task_{task_id}.npy")
-            # task_embeddings = torch.squeeze(torch.from_numpy(np.load(task_embeddings_path)))
+            task_embeddings_path = os.path.join(self.t5_text_embeddings_dir, dataset_name, f"task_{task_id}.npy")
+            task_embeddings = torch.squeeze(torch.from_numpy(np.load(task_embeddings_path)))
             # print(task_embeddings.shape)
-            task_embeddings = torch.zeros((1, 512, 1024))
+            # task_embeddings = torch.squeeze(torch.zeros((1, 512, 1024)))
         else:
             task_embeddings = torch.squeeze(self.t5_text_embeddings[item["task"]])
         

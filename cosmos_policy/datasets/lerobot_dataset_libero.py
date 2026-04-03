@@ -1384,7 +1384,7 @@ class MultiDatasetforDistTraining(torch.utils.data.Dataset):
         if os.path.exists(t5_text_embeddings_path):
             with open(t5_text_embeddings_path, "rb") as file:
                 self.t5_text_embeddings = pickle.load(file)
-        self.t5_text_embeddings_dir = os.path.join("Data", "t5_embeddings")
+        self.t5_text_embeddings_dir = os.path.join(parent_dir, "t5_embeddings")
         
         # other property
         self.use_proprio = use_proprio

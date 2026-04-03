@@ -78,7 +78,7 @@ def launch(config: Config, args: argparse.Namespace) -> None:
             # drop_last=config.dataloader_train.drop_last,
             # num_workers=config.dataloader_train.num_workers,
             # persistent_workers=config.dataloader_train.persistent_workers,
-            pin_memory=config.dataloader_train.pin_memory,
+            # pin_memory=config.dataloader_train.pin_memory,
             num_workers=2,
             # persistent_workers=False,
             pin_memory=False,

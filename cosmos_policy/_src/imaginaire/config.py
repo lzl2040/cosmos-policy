@@ -230,7 +230,7 @@ class PowerEMAConfig:
 @attrs.define(slots=False)
 class DDPConfig:
     # Traverse the computation graph to find parameters that don't receive gradients.
-    find_unused_parameters: bool = False
+    find_unused_parameters: bool = True
     # Set to True if the computation graph does not change during the whole training loop.
     static_graph: bool = True
     # Set to True if we want to synchronize buffers. Set to False if the sync is going to be handled elsewhere.

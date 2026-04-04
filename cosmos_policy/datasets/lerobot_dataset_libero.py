@@ -1599,13 +1599,13 @@ class MultiDatasetforDistTraining(torch.utils.data.Dataset):
         
         task_id = item["task_index"].item()
         dataset_name = item["dataset_name"]
-        if self.stage == "pretrain":
-            task_embeddings_path = os.path.join(self.t5_text_embeddings_dir, dataset_name, f"task_{task_id}.npy")
-            task_embeddings = torch.squeeze(torch.from_numpy(np.load(task_embeddings_path)))
+        # if self.stage == "pretrain":
+        task_embeddings_path = os.path.join(self.t5_text_embeddings_dir, dataset_name, f"task_{task_id}.npy")
+        task_embeddings = torch.squeeze(torch.from_numpy(np.load(task_embeddings_path)))
             # print(task_embeddings.shape)
             # task_embeddings = torch.squeeze(torch.zeros((1, 512, 1024)))
-        else:
-            task_embeddings = torch.squeeze(self.t5_text_embeddings[item["task"]])
+        # else:
+        #     task_embeddings = torch.squeeze(self.t5_text_embeddings[item["task"]])
         
         # prepare state and action
         item = self.prepare_action_state(item)

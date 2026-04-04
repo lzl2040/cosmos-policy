@@ -60,7 +60,7 @@ def init() -> int | None:
     except pynvml.NVMLError as e:
         log.warning(f"Failed to set device affinity: {e}")
     # Set up NCCL communication.
-    os.environ["TORCH_NCCL_BLOCKING_WAIT"] = "1"
+    os.environ["TORCH_NCCL_BLOCKING_WAIT"] = "0"
     os.environ["TORCH_NCCL_ASYNC_ERROR_HANDLING"] = "1"
     if dist.is_available():
         torch.cuda.set_device(local_rank)

@@ -79,10 +79,10 @@ uv run --no-sync --extra cu128 --group libero --python 3.10 \
 # export TORCH_DISTRIBUTED_DEBUG=DETAIL
 # export NCCL_DEBUG=INFO
 # export CUDA_LAUNCH_BLOCKING=1
-PYTHONUNBUFFERED=1 \
-TORCH_DISTRIBUTED_DEBUG=DETAIL \
-NCCL_DEBUG=INFO \
-NCCL_DEBUG_SUBSYS=COLL \
+# PYTHONUNBUFFERED=1 \
+# TORCH_DISTRIBUTED_DEBUG=DETAIL \
+# NCCL_DEBUG=INFO \
+# NCCL_DEBUG_SUBSYS=COLL \
 uv run --no-sync --extra cu128 --group libero --python 3.10 \
   torchrun --nnodes=$NNODES --nproc_per_node=$NPROC_PER_NODE --node_rank=$NODE_RANK --master_addr=$MASTER_ADDR --master_port=$MASTER_PORT \
   -m cosmos_policy.scripts.train \

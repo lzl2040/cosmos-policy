@@ -69,8 +69,8 @@ def launch(config: Config, args: argparse.Namespace) -> None:
             num_replicas=parallel_state.get_data_parallel_world_size(),
             rank=parallel_state.get_data_parallel_rank(),
             shuffle=True,
-            seed=0,
-            # drop_last=True
+            seed = 0 + parallel_state.get_data_parallel_rank(),  # Ensure different shuffling across ranks
+            drop_last=True
         )
         dataloader_train = DataLoader(
             dataset=dataset,
@@ -80,7 +80,7 @@ def launch(config: Config, args: argparse.Namespace) -> None:
             # num_workers=config.dataloader_train.num_workers,
             # persistent_workers=config.dataloader_train.persistent_workers,
             # pin_memory=config.dataloader_train.pin_memory,
-            num_workers=2,
+            num_workers=4,
             # persistent_workers=False,
             pin_memory=False,
             # pin_memory_device=config.dataloader_train.pin_memory_device,

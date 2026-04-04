@@ -1302,10 +1302,11 @@ class MultiDatasetforDistTraining(torch.utils.data.Dataset):
                     repo_id = f"bulldog-{dataset_name}" # any
                     ds_meta = LeRobotDatasetMetadata(repo_id, root=data_root)
                     delta_timestamps = resolve_delta_timestamps(ds_meta, chunk_size)
-                    if self.stage == "pretrain":
-                        image_transforms = v2.Resize((final_image_size, final_image_size))
-                    else:
-                        image_transforms = None
+                    # if self.stage == "pretrain":
+                    #     image_transforms = v2.Resize((final_image_size, final_image_size))
+                    # else:
+                    #     image_transforms = None
+                    image_transforms = v2.Resize((final_image_size, final_image_size))
                     dataset = LeRobotDataset(
                         repo_id, 
                         root=data_root,
@@ -1461,13 +1462,13 @@ class MultiDatasetforDistTraining(torch.utils.data.Dataset):
         # return len(self.dataset)
         return self.dataset_len
 
-    def set_epoch(self, epoch: int):
-        """Set the epoch for the dataset.
+    # def set_epoch(self, epoch: int):
+    #     """Set the epoch for the dataset.
 
-        Args:
-            epoch (int): The epoch to set.
-        """
-        self.epoch = epoch
+    #     Args:
+    #         epoch (int): The epoch to set.
+    #     """
+    #     self.epoch = epoch
     
     # def sample_step(self, index: int):
     #     seed = safe_hash((self.epoch, index, self.seed))

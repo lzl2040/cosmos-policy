@@ -68,11 +68,23 @@ def init() -> int | None:
         timeout_seconds = os.getenv("TORCH_NCCL_HEARTBEAT_TIMEOUT_SEC", 1800)
         # Convert the timeout to an integer (if it isn't already) and then to a timedelta
         timeout_timedelta = timedelta(seconds=int(timeout_seconds))
-        dist.init_process_group(backend="nccl", init_method="env://", timeout=timeout_timedelta)
+        master_ip = os.environ["MASTER_ADDR"]
+        master_port = os.environ["MASTER_PORT"]
+        master_uri = "tcp://%s:%s" % (master_ip, master_port)
+        world_size = int(os.environ["WORLD_SIZE"])
+        local_rank = int(os.environ["LOCAL_RANK"])
+        world_rank = int(os.environ["RANK"])
+        # dist.init_process_group(backend="nccl", init_method="env://", timeout=timeout_timedelta)
+        dist.init_process_group(backend="nccl", 
+                                world_size=world_size,
+                                rank=world_rank,
+                                init_method=master_uri, 
+                                timeout=timeout_timedelta)
         log.critical(
             f"Initialized distributed training with local rank {local_rank} with timeout {timeout_seconds}",
             rank0_only=False,
         )
+        torch.cuda.set_device(local_rank)
     # Increase the L2 fetch granularity for faster speed.
     _libcudart = ctypes.CDLL("libcudart.so")
     # Set device limit on the current device.

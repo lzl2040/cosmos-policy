@@ -211,41 +211,41 @@ def decode_video_frames_torchcodec(
         if log_loaded_timestamps:
             logging.info(f"Frame loaded at timestamp={pts:.4f}")
 
-    query_ts = torch.tensor(timestamps)
-    loaded_ts = torch.tensor(loaded_ts)
+    # query_ts = torch.tensor(timestamps)
+    # loaded_ts = torch.tensor(loaded_ts)
     # print(len(loaded_ts), query_ts)
 
     # compute distances between each query timestamp and loaded timestamps
-    dist = torch.cdist(query_ts[:, None], loaded_ts[:, None], p=1)
-    min_, argmin_ = dist.min(1)
+    # dist = torch.cdist(query_ts[:, None], loaded_ts[:, None], p=1)
+    # min_, argmin_ = dist.min(1)
 
-    is_within_tol = min_ < tolerance_s
-    if not is_within_tol.all():
-        raise FrameTimestampError(
-            f"One or several query timestamps unexpectedly violate the tolerance ({min_[~is_within_tol]} > {tolerance_s=})."
-            " It means that the closest frame that can be loaded from the video is too far away in time."
-            " This might be due to synchronization issues with timestamps during data collection."
-            " To be safe, we advise to ignore this item during training."
-            f"\nqueried timestamps: {query_ts}"
-            f"\nloaded timestamps: {loaded_ts}"
-            f"\nvideo: {video_path}"
-        )
+    # is_within_tol = min_ < tolerance_s
+    # if not is_within_tol.all():
+    #     raise FrameTimestampError(
+    #         f"One or several query timestamps unexpectedly violate the tolerance ({min_[~is_within_tol]} > {tolerance_s=})."
+    #         " It means that the closest frame that can be loaded from the video is too far away in time."
+    #         " This might be due to synchronization issues with timestamps during data collection."
+    #         " To be safe, we advise to ignore this item during training."
+    #         f"\nqueried timestamps: {query_ts}"
+    #         f"\nloaded timestamps: {loaded_ts}"
+    #         f"\nvideo: {video_path}"
+    #     )
 
     # get closest frames to the query timestamps
-    closest_frames = torch.stack([loaded_frames[idx] for idx in argmin_])
-    closest_ts = loaded_ts[argmin_]
+    # closest_frames = torch.stack([loaded_frames[idx] for idx in argmin_])
+    # closest_ts = loaded_ts[argmin_]
 
-    if log_loaded_timestamps:
-        logging.info(f"{closest_ts=}")
+    # if log_loaded_timestamps:
+    #     logging.info(f"{closest_ts=}")
 
-    # convert to float32 in [0,1] range
-    # closest_frames = (closest_frames / 255.0).type(torch.float32) # cosmos policy not need it
-    closest_frames = closest_frames.type(torch.float32)
+    # # convert to float32 in [0,1] range
+    # # closest_frames = (closest_frames / 255.0).type(torch.float32) # cosmos policy not need it
+    # closest_frames = closest_frames.type(torch.float32)
 
-    if not len(timestamps) == len(closest_frames): 
-        raise FrameTimestampError(
-            f"Retrieved timestamps differ from queried {set(closest_frames) - set(timestamps)}"
-        )
+    # if not len(timestamps) == len(closest_frames): 
+    #     raise FrameTimestampError(
+    #         f"Retrieved timestamps differ from queried {set(closest_frames) - set(timestamps)}"
+    #     )
     
     # if worker_count == 1:
     #     frames = decoder.get_frames_at(frame_indices)

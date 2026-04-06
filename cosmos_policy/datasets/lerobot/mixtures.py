@@ -160,7 +160,7 @@ OXE_NAMED_MIXTURES: Dict[str, List[Tuple[str, float]]] = {
         ("viola", 2.0),
         ("berkeley_autolab_ur5", 2.0),
         ("toto", 1.0),
-        ("language_table", 0.1),
+        # ("language_table", 0.1), # 4.6: remove it, because the data is ort6d in lerobot-format
         ("stanford_hydra_dataset_converted_externally_to_rlds", 2.0),
         ("austin_buds_dataset_converted_externally_to_rlds", 1.0),
         ("nyu_franka_play_dataset_converted_externally_to_rlds", 3.0),

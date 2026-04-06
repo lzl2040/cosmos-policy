@@ -84,96 +84,55 @@ class CosmosPolicyTrainer(ImaginaireTrainer):
         if self.config.trainer.run_validation and iteration == 0 and self.config.trainer.run_validation_on_start:
             self.validate(model, dataloader_val, iteration=iteration)
         _end_training = False
-        with (
-            maybe_enable_profiling(self.config, global_step=iteration) as torch_profiler,
-            maybe_enable_memory_snapshot(self.config, global_step=iteration) as memory_profiler,
-        ):
-            epoch = 0
+        epoch = 0
+        local_rank = distributed.get_rank()
+        while True:
+            dataloader_train.sampler.set_epoch(epoch)
+            dataloader_train_iter = iter(dataloader_train)
+
             while True:
-                dataloader_train.sampler.set_epoch(epoch)
-                dataloader_train_iter = iter(dataloader_train)
-                while True:
-                    # print(iteration)
-                    self.callbacks.on_before_dataloading(iteration)
-                    # try:
-                    #     with (
-                    #         self.training_timer("dataloader_train"),
-                    #         self.straggler_detector.profile_section(
-                    #             "dataloading",
-                    #             self.config.trainer.straggler_detection.analyze_dataloading,
-                    #             profile_cuda=False,
-                    #         ),
-                    #     ):
-                    #         data_batch = next(dataloader_train_iter)
-                    # except StopIteration:
-                    #     break
-                    # finally:
-                    #     self.callbacks.on_after_dataloading(iteration)
-                    
-                    with (
-                        self.training_timer("dataloader_train"),
-                        self.straggler_detector.profile_section(
-                            "dataloading",
-                            self.config.trainer.straggler_detection.analyze_dataloading,
-                            profile_cuda=False,
-                        ),
-                    ):
-                        data_batch = next(dataloader_train_iter)
-                    self.callbacks.on_after_dataloading(iteration)
-                    # print(epoch)
-                    # If max_iter is reached, exit the training loop.
-                    if iteration >= self.config.trainer.max_iter:
-                        _end_training = True
-                        break
-                    # Move all tensors in the data batch to GPU device.
-                    data_batch = misc.to(data_batch, device="cuda")
-                    # The actual training step.
-                    self.callbacks.on_training_step_start(model, data_batch, iteration=iteration)
-                    self.callbacks.on_training_step_batch_start(model, data_batch, iteration=iteration)
-                    if not model.training:
-                        model_ddp.train()
-                    assert model_ddp.training, "model_ddp is not in training mode."
-                    assert model.training, "model is not in training mode."
-                    # print("training")
-                    output_batch, loss, grad_accum_iter = self.training_step(
-                        model_ddp,
-                        optimizer,
-                        scheduler,
-                        grad_scaler,
-                        data_batch,
-                        iteration=iteration,
-                        grad_accum_iter=grad_accum_iter,
-                    )
-                    # if iteration >= 610:
-                    self.callbacks.on_training_step_batch_end(
-                        model, data_batch, output_batch, loss, iteration=iteration
-                    )
-                    # If the gradients are still being accumulated, continue to load the next training batch.
-                    if grad_accum_iter != 0:
-                        continue
-                    # Do the following when an actual optimizer (update) step has been made.
-                    iteration += 1
-                    # print(f"Iteration {iteration} completed.")
-                    # if iteration < 610:
-                    #     continue
-                    # Save checkpoint.
-                    if iteration % self.config.checkpoint.save_iter == 0:
-                        self.checkpointer.save(model, optimizer, scheduler, grad_scaler, iteration=iteration)
-                    self.callbacks.on_training_step_end(model, data_batch, output_batch, loss, iteration=iteration, dataloader_len = len(dataloader_train_iter) / self.config.trainer.grad_accum_iter)
-                    # Validation.
-                    if self.config.trainer.run_validation and iteration % self.config.trainer.validation_iter == 0:
-                        self.validate(model, dataloader_val, iteration=iteration)
-                    # print(torch_profiler, memory_profiler)
-                    # This iteration is successful; reset the timeout signal.
-                    signal.alarm(self.config.trainer.timeout_period)
-                    self.straggler_detector.generate_report(iteration)
-                    if torch_profiler:
-                        torch_profiler.step()
-                    if memory_profiler:
-                        memory_profiler.step()
-                epoch += 1
-                if _end_training:
+                # 取数据
+                data_batch = next(dataloader_train_iter)
+
+                # 结束条件
+                if iteration >= self.config.trainer.max_iter:
+                    _end_training = True
                     break
+
+                # 放到GPU
+                data_batch = misc.to(data_batch, device="cuda")
+                for k, v in data_batch.items():
+                    if isinstance(v, torch.Tensor) and torch.is_floating_point(data_batch[k]):
+                        data_batch[k] = v.to(dtype=torch.bfloat16)
+
+                # 确保train模式
+                if not model.training:
+                    model_ddp.train()
+
+                # 训练一步
+                output_batch, loss, grad_accum_iter = self.training_step(
+                    model_ddp,
+                    optimizer,
+                    scheduler,
+                    grad_scaler,
+                    data_batch,
+                    iteration=iteration,
+                    grad_accum_iter=grad_accum_iter,
+                )
+
+                # 梯度累积
+                if grad_accum_iter != 0:
+                    continue
+
+                # 完成一次iteration
+                iteration += 1
+
+                # 打印loss
+                print(f"rank:{local_rank} iter: {iteration}, loss: {loss.item()}")
+
+            epoch += 1
+            if _end_training:
+                break
         log.success("Done with training.")
         if iteration % self.config.checkpoint.save_iter != 0:
             self.checkpointer.save(model, optimizer, scheduler, grad_scaler, iteration=iteration)

@@ -119,7 +119,7 @@ class CosmosPolicyTrainer(ImaginaireTrainer):
                         ),
                     ):
                         data_batch = next(dataloader_train_iter)
-                    
+                    self.callbacks.on_after_dataloading(iteration)
                     # print(epoch)
                     # If max_iter is reached, exit the training loop.
                     if iteration >= self.config.trainer.max_iter:

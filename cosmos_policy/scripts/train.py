@@ -37,7 +37,6 @@ from cosmos_policy._src.imaginaire.utils.launch import log_reproducible_setup
 from torch.distributed.elastic.multiprocessing.errors import record
 
 @logging.catch(reraise=True)
-@record
 def launch(config: Config, args: argparse.Namespace) -> None:
     os.environ['WANDB_API_KEY'] = '9e1c3ac77856b8ebb5573c4e1e250c84aabfb904'
     config.job.name = args.job_name if args.job_name is not None else config.job.name
@@ -69,7 +68,8 @@ def launch(config: Config, args: argparse.Namespace) -> None:
             num_replicas=parallel_state.get_data_parallel_world_size(),
             rank=parallel_state.get_data_parallel_rank(),
             shuffle=True,
-            seed = 0 + parallel_state.get_data_parallel_rank(),  # Ensure different shuffling across ranks
+            # seed = 0 + parallel_state.get_data_parallel_rank(),  # Ensure different shuffling across ranks
+            seed = 0
             # drop_last=True
         )
         dataloader_train = DataLoader(
@@ -162,4 +162,11 @@ For python-based LazyConfig, use "path.key=value".
         print(f"{config.job.path_local}/config.yaml")
     else:
         # Launch the training job.
-        launch(config, args)
+        import os, sys, traceback
+        rank = int(os.environ.get("RANK", -1))
+        try:
+            launch(config, args)
+        except Exception as e:
+            print(f"[rank{rank}] FATAL: {e!r}", file=sys.stderr, flush=True)
+            traceback.print_exc()
+            raise

@@ -295,21 +295,23 @@ class ImaginaireTrainer:
         # Only let DDP sync gradient at the last iteration of the gradient accumulation window
         output_batch = None
         loss = 0
-        with distributed.ddp_sync_grad(model_ddp, grad_accum_iter == self.config.trainer.grad_accum_iter - 1):
-            # self.callbacks.on_before_forward(iteration=iteration)
-            with self.training_timer("forward"):
-                with self.straggler_detector.profile_section(
-                    "fwd", self.config.trainer.straggler_detection.analyze_forward
-                ):
-                    output_batch, loss = model_ddp.training_step(data, iteration)
-            # self.callbacks.on_after_forward(iteration=iteration)
-            # self.callbacks.on_before_backward(model_ddp, loss, iteration=iteration)
+        with torch.no_grad():
+            output_batch, loss = model_ddp.training_step(data, iteration)
+        # with distributed.ddp_sync_grad(model_ddp, grad_accum_iter == self.config.trainer.grad_accum_iter - 1):
+        #     # self.callbacks.on_before_forward(iteration=iteration)
+        #     with self.training_timer("forward"):
+        #         with self.straggler_detector.profile_section(
+        #             "fwd", self.config.trainer.straggler_detection.analyze_forward
+        #         ):
+        #             output_batch, loss = model_ddp.training_step(data, iteration)
+        #     # self.callbacks.on_after_forward(iteration=iteration)
+        #     # self.callbacks.on_before_backward(model_ddp, loss, iteration=iteration)
             
-            with self.training_timer("backward"):
-                with self.straggler_detector.profile_section(
-                    "bwd", self.config.trainer.straggler_detection.analyze_backward
-                ):
-                    loss_scaled = grad_scaler.scale(loss / self.config.trainer.grad_accum_iter)
+        #     with self.training_timer("backward"):
+        #         with self.straggler_detector.profile_section(
+        #             "bwd", self.config.trainer.straggler_detection.analyze_backward
+        #         ):
+        #             loss_scaled = grad_scaler.scale(loss / self.config.trainer.grad_accum_iter)
                     # loss_scaled.backward()
                     # if self.config.trainer.distributed_parallelism == "ddp":
                     #     model_ddp.module.on_after_backward()

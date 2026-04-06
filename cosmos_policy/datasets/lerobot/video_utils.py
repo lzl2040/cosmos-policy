@@ -200,6 +200,7 @@ def decode_video_frames_torchcodec(
         min(round(ts * average_fps), num_frames - 1)
         for ts in timestamps
     ]
+    frame_indices = [frame_indices[0], frame_indices[-1]]
     # frame_indices = [round(ts * average_fps) for ts in timestamps]
     # frame_indices = [frame_indices[0], frame_indices[-1]]
     # retrieve frames based on indices

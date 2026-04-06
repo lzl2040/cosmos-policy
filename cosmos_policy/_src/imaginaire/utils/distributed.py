@@ -52,13 +52,13 @@ def init() -> int | None:
         return torch.cuda.current_device()
 
     # Set GPU affinity.
-    pynvml.nvmlInit()
+    # pynvml.nvmlInit()
     local_rank = int(os.getenv("LOCAL_RANK", 0))
-    try:
-        device = Device(local_rank)
-        os.sched_setaffinity(0, device.get_cpu_affinity())
-    except pynvml.NVMLError as e:
-        log.warning(f"Failed to set device affinity: {e}")
+    # try:
+    #     device = Device(local_rank)
+    #     os.sched_setaffinity(0, device.get_cpu_affinity())
+    # except pynvml.NVMLError as e:
+    #     log.warning(f"Failed to set device affinity: {e}")
     # Set up NCCL communication.
     os.environ["TORCH_NCCL_BLOCKING_WAIT"] = "0"
     os.environ["TORCH_NCCL_ASYNC_ERROR_HANDLING"] = "1"
@@ -74,22 +74,22 @@ def init() -> int | None:
         world_size = int(os.environ["WORLD_SIZE"])
         local_rank = int(os.environ["LOCAL_RANK"])
         world_rank = int(os.environ["RANK"])
-        dist.init_process_group(backend="nccl", init_method="env://", timeout=timeout_timedelta)
-        # dist.init_process_group(backend="nccl", 
-        #                         world_size=world_size,
-        #                         rank=world_rank,
-        #                         init_method=master_uri, 
-        #                         timeout=timeout_timedelta)
+        # dist.init_process_group(backend="nccl", init_method="env://", timeout=timeout_timedelta)
+        dist.init_process_group(backend="nccl", 
+                                world_size=world_size,
+                                rank=world_rank,
+                                init_method=master_uri, 
+                                timeout=timeout_timedelta)
         log.critical(
             f"Initialized distributed training with local rank {local_rank} with timeout {timeout_seconds}",
             rank0_only=False,
         )
     # Increase the L2 fetch granularity for faster speed.
-    _libcudart = ctypes.CDLL("libcudart.so")
+    # _libcudart = ctypes.CDLL("libcudart.so")
     # Set device limit on the current device.
-    p_value = ctypes.cast((ctypes.c_int * 1)(), ctypes.POINTER(ctypes.c_int))
-    _libcudart.cudaDeviceSetLimit(ctypes.c_int(0x05), ctypes.c_int(128))
-    _libcudart.cudaDeviceGetLimit(p_value, ctypes.c_int(0x05))
+    # p_value = ctypes.cast((ctypes.c_int * 1)(), ctypes.POINTER(ctypes.c_int))
+    # _libcudart.cudaDeviceSetLimit(ctypes.c_int(0x05), ctypes.c_int(128))
+    # _libcudart.cudaDeviceGetLimit(p_value, ctypes.c_int(0x05))
     log.info(f"Training with {get_world_size()} GPUs.")
 
 

@@ -104,11 +104,12 @@ class CosmosPolicyTrainer(ImaginaireTrainer):
                 if iteration >= self.config.trainer.max_iter:
                     _end_training = True
                     break
-                if iteration % grad_accum_iter == 0:
-                    iteration += 1
-                    grad_accum_iter = 1
-                    print(f"Iteration {iteration}.")
-                grad_accum_iter += 1
+                if grad_accum_iter % self.config.trainer.grad_accum_iter != 0:
+                    grad_accum_iter += 1
+                    continue
+                iteration += 1
+                grad_accum_iter = 1
+                print(f"Iteration {iteration}.")
                 # # Move all tensors in the data batch to GPU device.
                 # data_batch = misc.to(data_batch, device="cuda")
                 # # The actual training step.

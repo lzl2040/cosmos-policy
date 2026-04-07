@@ -103,55 +103,58 @@ class CosmosPolicyTrainer(ImaginaireTrainer):
                 if iteration >= self.config.trainer.max_iter:
                     _end_training = True
                     break
-                # Move all tensors in the data batch to GPU device.
-                data_batch = misc.to(data_batch, device="cuda")
-                # The actual training step.
-                self.callbacks.on_training_step_start(model, data_batch, iteration=iteration)
-                self.callbacks.on_training_step_batch_start(model, data_batch, iteration=iteration)
-                if not model.training:
-                    model_ddp.train()
-                assert model_ddp.training, "model_ddp is not in training mode."
-                assert model.training, "model is not in training mode."
-                # print("training")
-                output_batch, loss, grad_accum_iter = self.training_step(
-                    model_ddp,
-                    optimizer,
-                    scheduler,
-                    grad_scaler,
-                    data_batch,
-                    iteration=iteration,
-                    grad_accum_iter=grad_accum_iter,
-                )
-                # if iteration >= 610:
-                self.callbacks.on_training_step_batch_end(
-                    model, data_batch, output_batch, loss, iteration=iteration
-                )
-                # If the gradients are still being accumulated, continue to load the next training batch.
-                if grad_accum_iter != 0:
-                    continue
-                # Do the following when an actual optimizer (update) step has been made.
-                iteration += 1
-                # print(f"Iteration {iteration} completed.")
-                # if iteration < 610:
+                if iteration % self.config.trainer.grad_accum_iter == 0:
+                    iteration += 1
+                    print(f"Iteration {iteration}.")
+                # # Move all tensors in the data batch to GPU device.
+                # data_batch = misc.to(data_batch, device="cuda")
+                # # The actual training step.
+                # self.callbacks.on_training_step_start(model, data_batch, iteration=iteration)
+                # self.callbacks.on_training_step_batch_start(model, data_batch, iteration=iteration)
+                # if not model.training:
+                #     model_ddp.train()
+                # assert model_ddp.training, "model_ddp is not in training mode."
+                # assert model.training, "model is not in training mode."
+                # # print("training")
+                # output_batch, loss, grad_accum_iter = self.training_step(
+                #     model_ddp,
+                #     optimizer,
+                #     scheduler,
+                #     grad_scaler,
+                #     data_batch,
+                #     iteration=iteration,
+                #     grad_accum_iter=grad_accum_iter,
+                # )
+                # # if iteration >= 610:
+                # self.callbacks.on_training_step_batch_end(
+                #     model, data_batch, output_batch, loss, iteration=iteration
+                # )
+                # # If the gradients are still being accumulated, continue to load the next training batch.
+                # if grad_accum_iter != 0:
                 #     continue
-                # Save checkpoint.
-                if iteration % self.config.checkpoint.save_iter == 0:
-                    self.checkpointer.save(model, optimizer, scheduler, grad_scaler, iteration=iteration)
-                self.callbacks.on_training_step_end(model, data_batch, output_batch, loss, iteration=iteration, dataloader_len = len(dataloader_train_iter) / self.config.trainer.grad_accum_iter)
-                # Validation.
-                if self.config.trainer.run_validation and iteration % self.config.trainer.validation_iter == 0:
-                    self.validate(model, dataloader_val, iteration=iteration)
-                # print(torch_profiler, memory_profiler)
-                # This iteration is successful; reset the timeout signal.
-                signal.alarm(self.config.trainer.timeout_period)
-                self.straggler_detector.generate_report(iteration)
-                if torch_profiler:
-                    torch_profiler.step()
-                if memory_profiler:
-                    memory_profiler.step()
-                epoch += 1
-                # if _end_training:
-                #     break
+                # # Do the following when an actual optimizer (update) step has been made.
+                # iteration += 1
+                # # print(f"Iteration {iteration} completed.")
+                # # if iteration < 610:
+                # #     continue
+                # # Save checkpoint.
+                # if iteration % self.config.checkpoint.save_iter == 0:
+                #     self.checkpointer.save(model, optimizer, scheduler, grad_scaler, iteration=iteration)
+                # self.callbacks.on_training_step_end(model, data_batch, output_batch, loss, iteration=iteration, dataloader_len = len(dataloader_train_iter) / self.config.trainer.grad_accum_iter)
+                # # Validation.
+                # if self.config.trainer.run_validation and iteration % self.config.trainer.validation_iter == 0:
+                #     self.validate(model, dataloader_val, iteration=iteration)
+                # # print(torch_profiler, memory_profiler)
+                # # This iteration is successful; reset the timeout signal.
+                # signal.alarm(self.config.trainer.timeout_period)
+                # self.straggler_detector.generate_report(iteration)
+                # if torch_profiler:
+                #     torch_profiler.step()
+                # if memory_profiler:
+                #     memory_profiler.step()
+            epoch += 1
+            # if _end_training:
+            #     break
         log.success("Done with training.")
         if iteration % self.config.checkpoint.save_iter != 0:
             self.checkpointer.save(model, optimizer, scheduler, grad_scaler, iteration=iteration)

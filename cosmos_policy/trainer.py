@@ -90,6 +90,7 @@ class CosmosPolicyTrainer(ImaginaireTrainer):
             maybe_enable_memory_snapshot(self.config, global_step=iteration) as memory_profiler,
         ):
             epoch = 0
+            grad_accum_iter = 1
             # while True:
             dataloader_train.sampler.set_epoch(epoch)
             dataloader_train_iter = iter(dataloader_train)
@@ -103,9 +104,11 @@ class CosmosPolicyTrainer(ImaginaireTrainer):
                 if iteration >= self.config.trainer.max_iter:
                     _end_training = True
                     break
-                if iteration % self.config.trainer.grad_accum_iter == 0:
+                if iteration % grad_accum_iter == 0:
                     iteration += 1
+                    grad_accum_iter = 1
                     print(f"Iteration {iteration}.")
+                grad_accum_iter += 1
                 # # Move all tensors in the data batch to GPU device.
                 # data_batch = misc.to(data_batch, device="cuda")
                 # # The actual training step.

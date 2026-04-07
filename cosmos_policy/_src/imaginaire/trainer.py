@@ -293,90 +293,37 @@ class ImaginaireTrainer:
             loss (torch.Tensor): The total loss of the training data batch.
         """
         # Only let DDP sync gradient at the last iteration of the gradient accumulation window
-        output_batch = None
-        loss = 0
         with distributed.ddp_sync_grad(model_ddp, grad_accum_iter == self.config.trainer.grad_accum_iter - 1):
             self.callbacks.on_before_forward(iteration=iteration)
-            with self.training_timer("forward"):
-                with self.straggler_detector.profile_section(
-                    "fwd", self.config.trainer.straggler_detection.analyze_forward
-                ):
-                    output_batch, loss = model_ddp.training_step(data, iteration)
+            
+            output_batch, loss = model_ddp.training_step(data, iteration)
+            
             self.callbacks.on_after_forward(iteration=iteration)
             self.callbacks.on_before_backward(model_ddp, loss, iteration=iteration)
-            
-            with self.training_timer("backward"):
-                with self.straggler_detector.profile_section(
-                    "bwd", self.config.trainer.straggler_detection.analyze_backward
-                ):
-                    loss_scaled = grad_scaler.scale(loss / self.config.trainer.grad_accum_iter)
-                    loss_scaled.backward()
-                    if self.config.trainer.distributed_parallelism == "ddp":
-                        model_ddp.module.on_after_backward()
-                    else:
-                        model_ddp.on_after_backward()
+
+            loss_scaled = grad_scaler.scale(loss / self.config.trainer.grad_accum_iter)
+            loss_scaled.backward()
+            if self.config.trainer.distributed_parallelism == "ddp":
+                model_ddp.module.on_after_backward()
+            else:
+                model_ddp.on_after_backward()
             self.callbacks.on_after_backward(model_ddp, iteration=iteration)
             
-            # success_run = True
-            # try:
-            #     with self.training_timer("backward"):
-            #         with self.straggler_detector.profile_section(
-            #             "bwd", self.config.trainer.straggler_detection.analyze_backward
-            #         ):
-            #             loss_scaled = grad_scaler.scale(loss / self.config.trainer.grad_accum_iter)
-            #             loss_scaled.backward()
-
-            #             if self.config.trainer.distributed_parallelism == "ddp":
-            #                 model_ddp.module.on_after_backward()
-            #             else:
-            #                 model_ddp.on_after_backward()
-
-            #     self.callbacks.on_after_backward(model_ddp, iteration=iteration)
-
-            # except Exception as e:
-            #     success_run = False
-            #     print("dataset_name", data["dataset_name"])
-            #     rank = dist.get_rank() if dist.is_available() and dist.is_initialized() else 0
-            #     world = dist.get_world_size() if dist.is_available() and dist.is_initialized() else 1
-
-            #     print(f"[rank {rank}/{world}] backward failed at iteration={iteration}")
-            #     print(f"[rank {rank}] loss={loss.detach().float().item() if torch.is_tensor(loss) else loss}")
-            #     print(f"[rank {rank}] exception={repr(e)}")
-            #     print(traceback.format_exc(), flush=True)
-
-            #     # 可选：看输入里有没有 NaN/Inf
-            #     if isinstance(data, dict):
-            #         for k, v in data.items():
-            #             if torch.is_tensor(v):
-            #                 print(
-            #                     f"[rank {rank}] batch[{k}] shape={tuple(v.shape)} "
-            #                     f"dtype={v.dtype} device={v.device} "
-            #                     f"nan={torch.isnan(v).any().item() if v.is_floating_point() else 'n/a'} "
-            #                     f"inf={torch.isinf(v).any().item() if v.is_floating_point() else 'n/a'}",
-            #                     flush=True
-            #                 )
-
-            #     # 不要继续训练，直接抛出
-            #     raise
         grad_accum_iter += 1
         if grad_accum_iter == self.config.trainer.grad_accum_iter:
             # if iteration >= 610:
-            with self.training_timer("optimizer_step"):
-                with self.straggler_detector.profile_section(
-                    "opt", self.config.trainer.straggler_detection.analyze_optimizer
-                ):
-                    self.callbacks.on_before_optimizer_step(
-                        model_ddp, optimizer, scheduler, grad_scaler, iteration=iteration
-                    )
-                    grad_scaler.step(optimizer)
-                    grad_scaler.update()
-                    scheduler.step()
-                    self.callbacks.on_before_zero_grad(model_ddp, optimizer, scheduler, iteration=iteration)
-                    if self.config.trainer.distributed_parallelism == "ddp":
-                        model_ddp.module.on_before_zero_grad(optimizer, scheduler, iteration=iteration)
-                    else:
-                        model_ddp.on_before_zero_grad(optimizer, scheduler, iteration=iteration)
-                    optimizer.zero_grad(set_to_none=True)
+            self.callbacks.on_before_optimizer_step(
+                model_ddp, optimizer, scheduler, grad_scaler, iteration=iteration
+            )
+            grad_scaler.step(optimizer)
+            grad_scaler.update()
+            scheduler.step()
+            self.callbacks.on_before_zero_grad(model_ddp, optimizer, scheduler, iteration=iteration)
+            if self.config.trainer.distributed_parallelism == "ddp":
+                model_ddp.module.on_before_zero_grad(optimizer, scheduler, iteration=iteration)
+            else:
+                model_ddp.on_before_zero_grad(optimizer, scheduler, iteration=iteration)
+            optimizer.zero_grad(set_to_none=True)
             grad_accum_iter = 0
         return output_batch, loss, grad_accum_iter
 

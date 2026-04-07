@@ -36,7 +36,7 @@ from cosmos_policy._src.imaginaire.utils.context_managers import data_loader_ini
 from cosmos_policy._src.imaginaire.utils.launch import log_reproducible_setup
 from torch.distributed.elastic.multiprocessing.errors import record
 
-@logging.catch(reraise=True)
+# @logging.catch(reraise=True)
 def launch(config: Config, args: argparse.Namespace) -> None:
     os.environ['WANDB_API_KEY'] = '9e1c3ac77856b8ebb5573c4e1e250c84aabfb904'
     config.job.name = args.job_name if args.job_name is not None else config.job.name

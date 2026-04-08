@@ -1302,11 +1302,11 @@ class MultiDatasetforDistTraining(torch.utils.data.Dataset):
                     repo_id = f"bulldog-{dataset_name}" # any
                     ds_meta = LeRobotDatasetMetadata(repo_id, root=data_root)
                     delta_timestamps = resolve_delta_timestamps(ds_meta, chunk_size)
-                    # if self.stage == "pretrain":
-                    #     image_transforms = v2.Resize((final_image_size, final_image_size))
-                    # else:
-                    #     image_transforms = None
-                    image_transforms = v2.Resize((final_image_size, final_image_size))
+                    if self.stage == "pretrain":
+                        image_transforms = v2.Resize((final_image_size, final_image_size))
+                    else:
+                        image_transforms = None
+                    # image_transforms = v2.Resize((final_image_size, final_image_size))
                     dataset = LeRobotDataset(
                         repo_id, 
                         root=data_root,
@@ -1600,13 +1600,13 @@ class MultiDatasetforDistTraining(torch.utils.data.Dataset):
         
         task_id = item["task_index"].item()
         dataset_name = item["dataset_name"]
-        # if self.stage == "pretrain":
-        task_embeddings_path = os.path.join(self.t5_text_embeddings_dir, dataset_name, f"task_{task_id}.npy")
-        task_embeddings = torch.squeeze(torch.from_numpy(np.load(task_embeddings_path)))
+        if self.stage == "pretrain":
+            task_embeddings_path = os.path.join(self.t5_text_embeddings_dir, dataset_name, f"task_{task_id}.npy")
+            task_embeddings = torch.squeeze(torch.from_numpy(np.load(task_embeddings_path)))
             # print(task_embeddings.shape)
             # task_embeddings = torch.squeeze(torch.zeros((1, 512, 1024)))
-        # else:
-        #     task_embeddings = torch.squeeze(self.t5_text_embeddings[item["task"]])
+        else:
+            task_embeddings = torch.squeeze(self.t5_text_embeddings[item["task"]])
         
         # prepare state and action
         item = self.prepare_action_state(item)

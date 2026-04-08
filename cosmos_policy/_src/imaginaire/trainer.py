@@ -313,17 +313,17 @@ class ImaginaireTrainer:
         grad_accum_iter += 1
         if grad_accum_iter == self.config.trainer.grad_accum_iter:
             # if iteration >= 610:
-            self.callbacks.on_before_optimizer_step(
-                model_ddp, optimizer, scheduler, grad_scaler, iteration=iteration
-            )
+            # self.callbacks.on_before_optimizer_step(
+            #     model_ddp, optimizer, scheduler, grad_scaler, iteration=iteration
+            # )
             # grad_scaler.step(optimizer)
             # grad_scaler.update()
             # scheduler.step()
-            self.callbacks.on_before_zero_grad(model_ddp, optimizer, scheduler, iteration=iteration)
-            if self.config.trainer.distributed_parallelism == "ddp":
-                model_ddp.module.on_before_zero_grad(optimizer, scheduler, iteration=iteration)
-            else:
-                model_ddp.on_before_zero_grad(optimizer, scheduler, iteration=iteration)
+            # self.callbacks.on_before_zero_grad(model_ddp, optimizer, scheduler, iteration=iteration)
+            # if self.config.trainer.distributed_parallelism == "ddp":
+            #     model_ddp.module.on_before_zero_grad(optimizer, scheduler, iteration=iteration)
+            # else:
+            #     model_ddp.on_before_zero_grad(optimizer, scheduler, iteration=iteration)
             # optimizer.zero_grad(set_to_none=True)
             grad_accum_iter = 0
         return output_batch, loss, grad_accum_iter

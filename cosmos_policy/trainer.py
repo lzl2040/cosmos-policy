@@ -21,7 +21,7 @@ This trainer extends the base ImaginaireTrainer to add:
 """
 
 import signal
-
+import psutil
 import torch
 import torch.utils.data
 
@@ -30,6 +30,7 @@ from cosmos_policy._src.imaginaire.trainer import ImaginaireTrainer
 from cosmos_policy._src.imaginaire.utils import distributed, log, misc
 from cosmos_policy._src.imaginaire.utils.profiling import maybe_enable_memory_snapshot, maybe_enable_profiling
 
+from megatron.core import parallel_state
 
 class CosmosPolicyTrainer(ImaginaireTrainer):
     """
@@ -126,6 +127,14 @@ class CosmosPolicyTrainer(ImaginaireTrainer):
                 self.callbacks.on_training_step_batch_end(
                     model, data_batch, output_batch, loss, iteration=iteration
                 )
+                
+                vm = psutil.virtual_memory()
+                print(
+                    f"rank {parallel_state.get_data_parallel_rank()} iter {iteration} "
+                    f"mem {vm.used/1024**3:.2f}/{vm.total/1024**3:.2f} GB "
+                    f"({vm.percent:.1f}%)"
+                )
+                
                 # If the gradients are still being accumulated, continue to load the next training batch.
                 if grad_accum_iter != 0:
                     continue

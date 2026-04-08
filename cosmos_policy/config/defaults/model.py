@@ -44,7 +44,7 @@ POLICY_FSDP_CONFIG = dict(
     ),
     model=L(CosmosPolicyVideo2WorldModel)(
         config=CosmosPolicyVideo2WorldConfig(
-            fsdp_shard_size=1,
+            fsdp_shard_size=8,
         ),
         _recursive_=False,
     ),

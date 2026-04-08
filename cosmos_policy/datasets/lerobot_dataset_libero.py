@@ -879,7 +879,7 @@ class LeRobotDataset(torch.utils.data.Dataset):
             #     video_path, query_ts, self.tolerance_s, self.video_backend
             # )
             frames = decode_video_frames(video_path, query_ts, self.tolerance_s, self.video_backend, 
-                                         return_type="numpy", worker_count=10)
+                                         return_type="image", worker_count=10)
             # print(vid_key, frames.shape)
             item[vid_key] = frames
 
@@ -946,8 +946,8 @@ class LeRobotDataset(torch.utils.data.Dataset):
         if self.image_transforms is not None:
             image_keys = self.meta.camera_keys
             for cam in image_keys:
-                item[cam] = [self.resize_numpy(img) for img in item[cam]]
-                # item[cam] = self.image_transforms(item[cam])
+                # item[cam] = [self.resize_numpy(img) for img in item[cam]]
+                item[cam] = self.image_transforms(item[cam])
                 # print(item[cam][0].shape, self.image_transforms)
         # Add task as a string
         task_idx = item["task_index"].item()

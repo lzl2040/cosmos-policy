@@ -1357,11 +1357,11 @@ class MultiDatasetforDistTraining(torch.utils.data.Dataset):
         if self.stage == "pretrain":
             print(f"Building pretrain dataset with target size {dataset_len_one_epoch}...")
             self.target_size = dataset_len_one_epoch   # 例如固定 5w
-            self.full_dataset = self.build_pretrain_dataset(
+            self.selected_indices, self.dataset_len = self.build_pretrain_dataset(
                 target_size=self.target_size,
                 seed=self.seed
             )
-            self.dataset_len = len(self.full_dataset)
+            self.dataset_ids = [i for i in range(len(self.datasets))]
         else:
             self.full_dataset = ConcatDataset(self.datasets)
             self.dataset_len = len(self.full_dataset)
@@ -1408,8 +1408,9 @@ class MultiDatasetforDistTraining(torch.utils.data.Dataset):
             target_size
         )
 
-        sampled_subsets = []
+        # sampled_subsets = []
         sampled_table = []
+        selected_indices = []
 
         for i, (dataset, count) in enumerate(zip(self.datasets, sample_counts)):
             ds_name = self.dataset_names[i]
@@ -1425,9 +1426,7 @@ class MultiDatasetforDistTraining(torch.utils.data.Dataset):
 
             # 有放回采样
             indices = rng.integers(0, ds_len, size=count)
-
-            subset = IndexedDataset(dataset, indices)
-            sampled_subsets.append(subset)
+            selected_indices.append(indices.tolist())
 
             sampled_table.append([
                 ds_name,
@@ -1441,9 +1440,10 @@ class MultiDatasetforDistTraining(torch.utils.data.Dataset):
             headers=["Dataset", "Original Frames", "Sampled Frames", "Ratio"],
             tablefmt="grid"
         ))
-        print(f"Total sampled frames: {sum(len(x) for x in sampled_subsets)}")
+        total_sample_len = sum(len(x) for x in selected_indices)
+        print(f"Total sampled frames: {total_sample_len}")
 
-        return ConcatDataset(sampled_subsets)
+        return selected_indices, total_sample_len
         
     def pad_vector(self, vector, new_dim):
         """Can be (batch_size x sequence_length x features_dimension)
@@ -1461,37 +1461,6 @@ class MultiDatasetforDistTraining(torch.utils.data.Dataset):
     def __len__(self):
         # return len(self.dataset)
         return self.dataset_len
-
-    # def set_epoch(self, epoch: int):
-    #     """Set the epoch for the dataset.
-
-    #     Args:
-    #         epoch (int): The epoch to set.
-    #     """
-    #     self.epoch = epoch
-    
-    # def sample_step(self, index: int):
-    #     seed = safe_hash((self.epoch, index, self.seed))
-    #     rng = np.random.default_rng(seed)
-
-    #     # Sample dataset
-    #     dataset_index = rng.choice(len(self.datasets), p=self._dataset_sampling_weights)
-    #     dataset = self.datasets[dataset_index]
-    #     step_pos = self._step_pos[dataset_index]
-    #     # re-update
-    #     if step_pos >= len(dataset):
-    #         order = np.arange(len(dataset))
-    #         seed = safe_hash((self.epoch, dataset_index, self.seed, step_pos))
-    #         rng = np.random.default_rng(seed)
-    #         rng.shuffle(order)
-    #         self._step_order[dataset_index] = order
-    #         step_pos = 0
-    #         # self.epoch += 1
-
-    #     single_step_index = self._step_order[dataset_index][step_pos]
-    #     # print(f"Single step:{single_step_index}")
-    #     self._step_pos[dataset_index] = step_pos + 1
-    #     return dataset[int(single_step_index)]
     
     def sample_step(self, index):
         seed = safe_hash((self.epoch, index, self.seed))
@@ -1593,18 +1562,26 @@ class MultiDatasetforDistTraining(torch.utils.data.Dataset):
     
     def __getitem__(self, index):
         # every item key contains t-t+chunk_size elements (large than episode length use repeat last)
-        # if self.stage == "pretrain":
-        #     item = self.sample_step(index)
-        # else:
-        item = self.full_dataset[index]
+        if self.stage == "pretrain":
+            dataset_id = random.choices(self.dataset_ids, weights=self._dataset_sampling_weights, k=1)[0]
+            dataset = self.datasets[dataset_id]
+            indices = self.selected_indices[dataset_id] # the selected indices of this dataset
+            selected_id = random.choice(indices) # equal prob
+            item = dataset[selected_id]
+        else:
+            item = self.full_dataset[index]
         
         task_id = item["task_index"].item()
         dataset_name = item["dataset_name"]
         if self.stage == "pretrain":
-            # task_embeddings_path = os.path.join(self.t5_text_embeddings_dir, dataset_name, f"task_{task_id}.npy")
+            task_embeddings_path = os.path.join(self.t5_text_embeddings_dir, dataset_name, f"task_{task_id}.npy")
+            with open(task_embeddings_path, 'rb') as f:
+                # 不使用 mmap，读取后立即转为 Tensor 并 clone，断开与 numpy 的内存联系
+                task_embeddings = torch.from_numpy(np.load(f)).squeeze().clone()
+                task_embeddings = torch.squeeze(task_embeddings)
             # task_embeddings = torch.squeeze(torch.from_numpy(np.load(task_embeddings_path)))
             # print(task_embeddings.shape)
-            task_embeddings = torch.squeeze(torch.zeros((1, 512, 1024)))
+            # task_embeddings = torch.squeeze(torch.zeros((1, 512, 1024)))
         else:
             task_embeddings = torch.squeeze(self.t5_text_embeddings[item["task"]])
         
@@ -1620,7 +1597,7 @@ class MultiDatasetforDistTraining(torch.utils.data.Dataset):
         for new_key, old_key in image_obs_keys.items():
             if old_key != None:
                 # print(item[f"observation.images.{old_key}"][0].shape)
-                item[f"observation.images.{new_key}"] = copy.deepcopy(item[f"observation.images.{old_key}"])
+                item[f"observation.images.{new_key}"] = item[f"observation.images.{old_key}"]
                 exist_image = item[f"observation.images.{old_key}"]
                 if new_key != old_key:
                     del item[f"observation.images.{old_key}"]

@@ -34,9 +34,9 @@ from cosmos_policy._src.imaginaire.serialization import to_yaml
 from cosmos_policy._src.imaginaire.utils import distributed
 from cosmos_policy._src.imaginaire.utils.context_managers import data_loader_init, distributed_init, model_init
 from cosmos_policy._src.imaginaire.utils.launch import log_reproducible_setup
-from torch.distributed.elastic.multiprocessing.errors import record
 
-# @logging.catch(reraise=True)
+
+@logging.catch(reraise=True)
 def launch(config: Config, args: argparse.Namespace) -> None:
     os.environ['WANDB_API_KEY'] = '9e1c3ac77856b8ebb5573c4e1e250c84aabfb904'
     config.job.name = args.job_name if args.job_name is not None else config.job.name
@@ -68,23 +68,18 @@ def launch(config: Config, args: argparse.Namespace) -> None:
             num_replicas=parallel_state.get_data_parallel_world_size(),
             rank=parallel_state.get_data_parallel_rank(),
             shuffle=True,
-            # seed = 0 + parallel_state.get_data_parallel_rank(),  # Ensure different shuffling across ranks
-            seed = 0
-            # drop_last=True
+            seed=0,
         )
         dataloader_train = DataLoader(
             dataset=dataset,
             sampler=sampler,
             batch_size=config.dataloader_train.batch_size,
-            # drop_last=config.dataloader_train.drop_last,
-            # num_workers=config.dataloader_train.num_workers,
-            # persistent_workers=config.dataloader_train.persistent_workers,
-            # pin_memory=config.dataloader_train.pin_memory,
-            num_workers=4,
-            persistent_workers=False,
-            pin_memory=False,
-            # pin_memory_device=config.dataloader_train.pin_memory_device,
-            # timeout=config.dataloader_train.timeout,
+            drop_last=config.dataloader_train.drop_last,
+            num_workers=config.dataloader_train.num_workers,
+            persistent_workers=config.dataloader_train.persistent_workers,
+            pin_memory=config.dataloader_train.pin_memory,
+            pin_memory_device=config.dataloader_train.pin_memory_device,
+            timeout=config.dataloader_train.timeout,
         )
 
         dataloader_val = None
@@ -162,11 +157,4 @@ For python-based LazyConfig, use "path.key=value".
         print(f"{config.job.path_local}/config.yaml")
     else:
         # Launch the training job.
-        import os, sys, traceback
-        rank = int(os.environ.get("RANK", -1))
-        try:
-            launch(config, args)
-        except Exception as e:
-            print(f"[rank{rank}] FATAL: {e!r}", file=sys.stderr, flush=True)
-            traceback.print_exc()
-            raise
+        launch(config, args)

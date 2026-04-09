@@ -21,10 +21,6 @@ import signal
 import torch
 import torch.distributed as dist
 import torch.utils.data
-import traceback
-import torch
-import torch.distributed as dist
-
 
 from cosmos_policy._src.imaginaire.flags import INTERNAL
 from cosmos_policy._src.imaginaire.utils.context_managers import distributed_init
@@ -295,36 +291,42 @@ class ImaginaireTrainer:
         # Only let DDP sync gradient at the last iteration of the gradient accumulation window
         with distributed.ddp_sync_grad(model_ddp, grad_accum_iter == self.config.trainer.grad_accum_iter - 1):
             self.callbacks.on_before_forward(iteration=iteration)
-            
-            with torch.no_grad():
-                output_batch, loss = model_ddp.training_step(data, iteration)
-            
+            with self.training_timer("forward"):
+                with self.straggler_detector.profile_section(
+                    "fwd", self.config.trainer.straggler_detection.analyze_forward
+                ):
+                    output_batch, loss = model_ddp.training_step(data, iteration)
             self.callbacks.on_after_forward(iteration=iteration)
             self.callbacks.on_before_backward(model_ddp, loss, iteration=iteration)
-
-            # loss_scaled = grad_scaler.scale(loss / self.config.trainer.grad_accum_iter)
-            # loss_scaled.backward()
-            if self.config.trainer.distributed_parallelism == "ddp":
-                model_ddp.module.on_after_backward()
-            else:
-                model_ddp.on_after_backward()
+            with self.training_timer("backward"):
+                with self.straggler_detector.profile_section(
+                    "bwd", self.config.trainer.straggler_detection.analyze_backward
+                ):
+                    loss_scaled = grad_scaler.scale(loss / self.config.trainer.grad_accum_iter)
+                    loss_scaled.backward()
+                    if self.config.trainer.distributed_parallelism == "ddp":
+                        model_ddp.module.on_after_backward()
+                    else:
+                        model_ddp.on_after_backward()
             self.callbacks.on_after_backward(model_ddp, iteration=iteration)
-            
         grad_accum_iter += 1
         if grad_accum_iter == self.config.trainer.grad_accum_iter:
-            # if iteration >= 610:
-            # self.callbacks.on_before_optimizer_step(
-            #     model_ddp, optimizer, scheduler, grad_scaler, iteration=iteration
-            # )
-            # grad_scaler.step(optimizer)
-            # grad_scaler.update()
-            # scheduler.step()
-            # self.callbacks.on_before_zero_grad(model_ddp, optimizer, scheduler, iteration=iteration)
-            # if self.config.trainer.distributed_parallelism == "ddp":
-            #     model_ddp.module.on_before_zero_grad(optimizer, scheduler, iteration=iteration)
-            # else:
-            #     model_ddp.on_before_zero_grad(optimizer, scheduler, iteration=iteration)
-            # optimizer.zero_grad(set_to_none=True)
+            with self.training_timer("optimizer_step"):
+                with self.straggler_detector.profile_section(
+                    "opt", self.config.trainer.straggler_detection.analyze_optimizer
+                ):
+                    self.callbacks.on_before_optimizer_step(
+                        model_ddp, optimizer, scheduler, grad_scaler, iteration=iteration
+                    )
+                    grad_scaler.step(optimizer)
+                    grad_scaler.update()
+                    scheduler.step()
+                    self.callbacks.on_before_zero_grad(model_ddp, optimizer, scheduler, iteration=iteration)
+                    if self.config.trainer.distributed_parallelism == "ddp":
+                        model_ddp.module.on_before_zero_grad(optimizer, scheduler, iteration=iteration)
+                    else:
+                        model_ddp.on_before_zero_grad(optimizer, scheduler, iteration=iteration)
+                    optimizer.zero_grad(set_to_none=True)
             grad_accum_iter = 0
         return output_batch, loss, grad_accum_iter
 

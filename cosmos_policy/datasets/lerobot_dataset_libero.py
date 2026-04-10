@@ -1573,17 +1573,17 @@ class MultiDatasetforDistTraining(torch.utils.data.Dataset):
         
         task_id = item["task_index"].item()
         dataset_name = item["dataset_name"]
-        if self.stage == "pretrain":
-            task_embeddings_path = os.path.join(self.t5_text_embeddings_dir, dataset_name, f"task_{task_id}.npy")
-            with open(task_embeddings_path, 'rb') as f:
-                # 不使用 mmap，读取后立即转为 Tensor 并 clone，断开与 numpy 的内存联系
-                task_embeddings = torch.from_numpy(np.load(f)).squeeze().clone()
-                task_embeddings = torch.squeeze(task_embeddings)
+        # if self.stage == "pretrain":
+        task_embeddings_path = os.path.join(self.t5_text_embeddings_dir, dataset_name, f"task_{task_id}.npy")
+        with open(task_embeddings_path, 'rb') as f:
+            # 不使用 mmap，读取后立即转为 Tensor 并 clone，断开与 numpy 的内存联系
+            task_embeddings = torch.from_numpy(np.load(f)).squeeze().clone()
+            task_embeddings = torch.squeeze(task_embeddings)
             # task_embeddings = torch.squeeze(torch.from_numpy(np.load(task_embeddings_path)))
             # print(task_embeddings.shape)
             # task_embeddings = torch.squeeze(torch.zeros((1, 512, 1024)))
-        else:
-            task_embeddings = torch.squeeze(self.t5_text_embeddings[item["task"]])
+        # else:
+        #     task_embeddings = torch.squeeze(self.t5_text_embeddings[item["task"]])
         
         # prepare state and action
         item = self.prepare_action_state(item)

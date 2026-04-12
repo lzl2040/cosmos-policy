@@ -92,23 +92,26 @@ class CosmosPolicyTrainer(ImaginaireTrainer):
             while True:
                 dataloader_train.sampler.set_epoch(epoch)
                 dataloader_train.dataset.set_epoch(epoch)
-                dataloader_train_iter = iter(dataloader_train)
-                while True:
+                # dataloader_train_iter = iter(dataloader_train)
+                for data_batch in dataloader_train:
                     self.callbacks.on_before_dataloading(iteration)
-                    try:
-                        with (
-                            self.training_timer("dataloader_train"),
-                            self.straggler_detector.profile_section(
-                                "dataloading",
-                                self.config.trainer.straggler_detection.analyze_dataloading,
-                                profile_cuda=False,
-                            ),
-                        ):
-                            data_batch = next(dataloader_train_iter)
-                    except StopIteration:
-                        break
-                    finally:
-                        self.callbacks.on_after_dataloading(iteration)
+                    self.callbacks.on_after_dataloading(iteration)
+                # while True:
+                #     self.callbacks.on_before_dataloading(iteration)
+                #     try:
+                #         with (
+                #             self.training_timer("dataloader_train"),
+                #             self.straggler_detector.profile_section(
+                #                 "dataloading",
+                #                 self.config.trainer.straggler_detection.analyze_dataloading,
+                #                 profile_cuda=False,
+                #             ),
+                #         ):
+                #             data_batch = next(dataloader_train_iter)
+                #     except StopIteration:
+                #         break
+                #     finally:
+                #         self.callbacks.on_after_dataloading(iteration)
                     # If max_iter is reached, exit the training loop.
                     if iteration >= self.config.trainer.max_iter:
                         _end_training = True

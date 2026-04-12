@@ -75,11 +75,14 @@ def launch(config: Config, args: argparse.Namespace) -> None:
             sampler=sampler,
             batch_size=config.dataloader_train.batch_size,
             drop_last=config.dataloader_train.drop_last,
-            num_workers=config.dataloader_train.num_workers,
-            persistent_workers=config.dataloader_train.persistent_workers,
-            pin_memory=config.dataloader_train.pin_memory,
-            pin_memory_device=config.dataloader_train.pin_memory_device,
-            timeout=config.dataloader_train.timeout,
+            num_workers=4,
+            pin_memory=False,
+            persistent_workers=False
+            # num_workers=config.dataloader_train.num_workers,
+            # persistent_workers=config.dataloader_train.persistent_workers,
+            # pin_memory=config.dataloader_train.pin_memory,
+            # pin_memory_device=config.dataloader_train.pin_memory_device,
+            # timeout=config.dataloader_train.timeout,
         )
 
         dataloader_val = None

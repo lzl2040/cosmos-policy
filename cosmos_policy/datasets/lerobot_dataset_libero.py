@@ -778,6 +778,7 @@ class LeRobotDataset(torch.utils.data.Dataset):
 
         # TODO(aliberts): hf_dataset.set_format("torch")
         hf_dataset.set_transform(hf_transform_to_torch)
+        # hf_dataset.set_format("torch")
         return hf_dataset
 
     def create_hf_dataset(self) -> datasets.Dataset:
@@ -1362,6 +1363,7 @@ class MultiDatasetforDistTraining(torch.utils.data.Dataset):
                 seed=self.seed
             )
             self.dataset_ids = [i for i in range(len(self.datasets))]
+            # self.dataset_len = 
         else:
             self.full_dataset = ConcatDataset(self.datasets)
             self.dataset_len = len(self.full_dataset)
@@ -1444,7 +1446,15 @@ class MultiDatasetforDistTraining(torch.utils.data.Dataset):
         print(f"Total sampled frames: {total_sample_len}")
 
         return selected_indices, total_sample_len
-        
+    
+    def set_epoch(self, epoch):
+        print(f"Setting epoch to {epoch}..., Update random seed for sampling.")
+        self.epoch = epoch
+        self.selected_indices, self.dataset_len = self.build_pretrain_dataset(
+            target_size=self.target_size,
+            seed=self.seed + self.epoch
+        )
+    
     def pad_vector(self, vector, new_dim):
         """Can be (batch_size x sequence_length x features_dimension)
         or (batch_size x features_dimension)
@@ -1561,29 +1571,32 @@ class MultiDatasetforDistTraining(torch.utils.data.Dataset):
         return item
     
     def __getitem__(self, index):
+        # item = self.full_dataset[index]
         # every item key contains t-t+chunk_size elements (large than episode length use repeat last)
         if self.stage == "pretrain":
             dataset_id = random.choices(self.dataset_ids, weights=self._dataset_sampling_weights, k=1)[0]
             dataset = self.datasets[dataset_id]
             indices = self.selected_indices[dataset_id] # the selected indices of this dataset
             selected_id = random.choice(indices) # equal prob
+            # selected_id = 0
             item = dataset[selected_id]
         else:
             item = self.full_dataset[index]
         
+        # del item
         task_id = item["task_index"].item()
         dataset_name = item["dataset_name"]
-        # if self.stage == "pretrain":
-        task_embeddings_path = os.path.join(self.t5_text_embeddings_dir, dataset_name, f"task_{task_id}.npy")
-        with open(task_embeddings_path, 'rb') as f:
-            # 不使用 mmap，读取后立即转为 Tensor 并 clone，断开与 numpy 的内存联系
-            task_embeddings = torch.from_numpy(np.load(f)).squeeze().clone()
-            task_embeddings = torch.squeeze(task_embeddings)
+        if self.stage == "pretrain":
+            task_embeddings_path = os.path.join(self.t5_text_embeddings_dir, dataset_name, f"task_{task_id}.npy")
+            with open(task_embeddings_path, 'rb') as f:
+                # 不使用 mmap，读取后立即转为 Tensor 并 clone，断开与 numpy 的内存联系
+                task_embeddings = torch.from_numpy(np.load(f)).squeeze()
+                task_embeddings = torch.squeeze(task_embeddings)
             # task_embeddings = torch.squeeze(torch.from_numpy(np.load(task_embeddings_path)))
             # print(task_embeddings.shape)
             # task_embeddings = torch.squeeze(torch.zeros((1, 512, 1024)))
-        # else:
-        #     task_embeddings = torch.squeeze(self.t5_text_embeddings[item["task"]])
+        else:
+            task_embeddings = torch.squeeze(self.t5_text_embeddings[item["task"]])
         
         # prepare state and action
         item = self.prepare_action_state(item)
@@ -1760,4 +1773,4 @@ class MultiDatasetforDistTraining(torch.utils.data.Dataset):
         }
         
         return sample_dict
-
+        # return 1

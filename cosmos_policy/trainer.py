@@ -151,7 +151,7 @@ class CosmosPolicyTrainer(ImaginaireTrainer):
                     # Save checkpoint.
                     if iteration % self.config.checkpoint.save_iter == 0:
                         self.checkpointer.save(model, optimizer, scheduler, grad_scaler, iteration=iteration)
-                    self.callbacks.on_training_step_end(model, data_batch, output_batch, loss, iteration=iteration, dataloader_len = len(dataloader_train_iter) / self.config.trainer.grad_accum_iter)
+                    self.callbacks.on_training_step_end(model, data_batch, output_batch, loss, iteration=iteration, dataloader_len = len(dataloader_train) / self.config.trainer.grad_accum_iter)
                     # Validation.
                     if self.config.trainer.run_validation and iteration % self.config.trainer.validation_iter == 0:
                         self.validate(model, dataloader_val, iteration=iteration)

@@ -41,6 +41,7 @@ from cosmos_policy.datasets.lerobot.utils import (
     DEFAULT_IMAGE_PATH,
     INFO_PATH,
     TASKS_PATH,
+    backward_compatible_episodes_stats,
     append_jsonlines,
     check_delta_timestamps,
     check_timestamps_sync,
@@ -216,6 +217,7 @@ class LeRobotDatasetMetadata:
                 if k in image_features.keys():
                     feature_to_return.pop(k)
         return feature_to_return
+    
     def load_metadata(self):
         self.info = load_info(self.root)
         self.info['features'] = self.restrict_image_features(self.info['features'])
@@ -223,15 +225,20 @@ class LeRobotDatasetMetadata:
         self.tasks, self.task_to_task_index = load_tasks(self.root)
         self.episodes = load_episodes(self.root)
         self.stats = load_stats(self.root)
-        if self.stats == None:
-            self.episodes_stats = load_episodes_stats(self.root)
-            self.stats = aggregate_stats(list(self.episodes_stats.values()))
-        # if self._version < packaging.version.parse("v2.1"):
-        #     self.stats = load_stats(self.root)
-        #     self.episodes_stats = backward_compatible_episodes_stats(self.stats, self.episodes)
-        # else:
-        #     self.episodes_stats = load_episodes_stats(self.root)
-        #     self.stats = aggregate_stats(list(self.episodes_stats.values()))
+        # if self.stats == None:
+        #     episodes_stats = load_episodes_stats(self.root)
+        #     self.stats = aggregate_stats(list(episodes_stats.values()))
+        #     episodes_stats.clear()
+        #     del episodes_stats
+        
+        if self._version < packaging.version.parse("v2.1"):
+            self.stats = load_stats(self.root)
+            self.episodes_stats = backward_compatible_episodes_stats(self.stats, self.episodes)
+        else:
+            episodes_stats = load_episodes_stats(self.root)
+            self.stats = aggregate_stats(list(episodes_stats.values()))
+            episodes_stats.clear()
+            del episodes_stats
 
     def pull_from_repo(
         self,
@@ -1447,12 +1454,12 @@ class MultiDatasetforDistTraining(torch.utils.data.Dataset):
 
         return selected_indices, total_sample_len
     
-    def set_epoch(self, epoch):
+    def set_epoch(self, epoch, rank):
         print(f"Setting epoch to {epoch}..., Update random seed for sampling.")
         self.epoch = epoch
         self.selected_indices, self.dataset_len = self.build_pretrain_dataset(
             target_size=self.target_size,
-            seed=self.seed + self.epoch
+            seed=self.seed + self.epoch + rank
         )
     
     def pad_vector(self, vector, new_dim):

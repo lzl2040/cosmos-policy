@@ -24,6 +24,7 @@ import signal
 import psutil
 import torch
 import torch.utils.data
+import os
 
 from cosmos_policy._src.imaginaire.model import ImaginaireModel
 from cosmos_policy._src.imaginaire.trainer import ImaginaireTrainer
@@ -79,6 +80,8 @@ class CosmosPolicyTrainer(ImaginaireTrainer):
             raise ValueError(f"Unknown distributed parallelism mode: {self.config.trainer.distributed_parallelism}")
 
         log.info("Starting training...")
+        local_rank = int(os.environ["LOCAL_RANK"]) # 本地第几个
+        world_rank = int(os.environ["RANK"]) # 全局rank
         self.callbacks.on_train_start(model, iteration=iteration)
         # Initial validation.
         if self.config.trainer.run_validation and iteration == 0 and self.config.trainer.run_validation_on_start:
@@ -91,24 +94,27 @@ class CosmosPolicyTrainer(ImaginaireTrainer):
             epoch = 0
             while True:
                 dataloader_train.sampler.set_epoch(epoch)
-                dataloader_train.dataset.set_epoch(epoch)
-                dataloader_train_iter = iter(dataloader_train)
-                while True:
+                dataloader_train.dataset.set_epoch(epoch, rank = world_rank)
+                # dataloader_train_iter = iter(dataloader_train)
+                for data_batch in dataloader_train:
                     self.callbacks.on_before_dataloading(iteration)
-                    try:
-                        with (
-                            self.training_timer("dataloader_train"),
-                            self.straggler_detector.profile_section(
-                                "dataloading",
-                                self.config.trainer.straggler_detection.analyze_dataloading,
-                                profile_cuda=False,
-                            ),
-                        ):
-                            data_batch = next(dataloader_train_iter)
-                    except StopIteration:
-                        break
-                    finally:
-                        self.callbacks.on_after_dataloading(iteration)
+                    self.callbacks.on_after_dataloading(iteration)
+                # while True:
+                #     self.callbacks.on_before_dataloading(iteration)
+                #     try:
+                #         with (
+                #             self.training_timer("dataloader_train"),
+                #             self.straggler_detector.profile_section(
+                #                 "dataloading",
+                #                 self.config.trainer.straggler_detection.analyze_dataloading,
+                #                 profile_cuda=False,
+                #             ),
+                #         ):
+                #             data_batch = next(dataloader_train_iter)
+                #     except StopIteration:
+                #         break
+                #     finally:
+                #         self.callbacks.on_after_dataloading(iteration)
                     # If max_iter is reached, exit the training loop.
                     if iteration >= self.config.trainer.max_iter:
                         _end_training = True
@@ -141,14 +147,14 @@ class CosmosPolicyTrainer(ImaginaireTrainer):
                     iteration += 1
                     vm = psutil.virtual_memory()
                     print(
-                        f"rank {parallel_state.get_data_parallel_rank()} iter {iteration} "
+                        f"rank {local_rank} world:{world_rank} iter {iteration} "
                         f"mem {vm.used/1024**3:.2f}/{vm.total/1024**3:.2f} GB "
                         f"({vm.percent:.1f}%)"
                     )
                     # Save checkpoint.
                     if iteration % self.config.checkpoint.save_iter == 0:
                         self.checkpointer.save(model, optimizer, scheduler, grad_scaler, iteration=iteration)
-                    self.callbacks.on_training_step_end(model, data_batch, output_batch, loss, iteration=iteration, dataloader_len = len(dataloader_train_iter) / self.config.trainer.grad_accum_iter)
+                    self.callbacks.on_training_step_end(model, data_batch, output_batch, loss, iteration=iteration, dataloader_len = len(dataloader_train) / self.config.trainer.grad_accum_iter)
                     # Validation.
                     if self.config.trainer.run_validation and iteration % self.config.trainer.validation_iter == 0:
                         self.validate(model, dataloader_val, iteration=iteration)

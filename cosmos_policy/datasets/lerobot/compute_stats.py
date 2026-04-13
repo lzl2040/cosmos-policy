@@ -631,6 +631,9 @@ def aggregate_stats(stats_list: list[dict[str, dict]], max_dims = 32) -> dict[st
             pad_stats_with_key = []
             max_dim = max_dims[key]
             for stats in stats_with_key: # for different dataset
+                if np.isnan(stats["mean"]).any() or np.isnan(stats["std"]).any() or np.isnan(stats["max"]).any() or np.isnan(stats["min"]).any():
+                    print(f"Warning: NaN values found in stats for key '{key}'. Skipping this dataset in aggregation.")
+                    continue
                 pad_stats = {}
                 pad_len = max_dim - len(stats["mean"])
                 if pad_len <= 0:
@@ -641,11 +644,11 @@ def aggregate_stats(stats_list: list[dict[str, dict]], max_dims = 32) -> dict[st
                 pad_stats["std"] = np.pad(stats["std"], (0, pad_len), mode="constant", constant_values=1)
                 pad_stats["max"] = np.pad(stats["max"], (0, pad_len), mode="constant", constant_values=1)
                 pad_stats["min"] = np.pad(stats["min"], (0, pad_len), mode="constant", constant_values=-1)
-                pad_stats["q01"] = np.pad(stats["q01"], (0, pad_len), mode="constant", constant_values=-1)
-                pad_stats["q10"] = np.pad(stats["q10"], (0, pad_len), mode="constant", constant_values=-0.5)
-                pad_stats["q50"] = np.pad(stats["q50"], (0, pad_len), mode="constant", constant_values=0)
-                pad_stats["q90"] = np.pad(stats["q90"], (0, pad_len), mode="constant", constant_values=0.5)
-                pad_stats["q99"] = np.pad(stats["q99"], (0, pad_len), mode="constant", constant_values=1)
+                # pad_stats["q01"] = np.pad(stats["q01"], (0, pad_len), mode="constant", constant_values=-1)
+                # pad_stats["q10"] = np.pad(stats["q10"], (0, pad_len), mode="constant", constant_values=-0.5)
+                # pad_stats["q50"] = np.pad(stats["q50"], (0, pad_len), mode="constant", constant_values=0)
+                # pad_stats["q90"] = np.pad(stats["q90"], (0, pad_len), mode="constant", constant_values=0.5)
+                # pad_stats["q99"] = np.pad(stats["q99"], (0, pad_len), mode="constant", constant_values=1)
                 pad_stats["count"] = stats["count"]
                 pad_stats_with_key.append(pad_stats)
         else:

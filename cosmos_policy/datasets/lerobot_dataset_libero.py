@@ -1378,7 +1378,8 @@ class MultiDatasetforDistTraining(torch.utils.data.Dataset):
         print(f"Dataset Len:{self.dataset_len}")
         # 4. Aggregate dataset stats from all datasets
         self.stats = aggregate_stats([dataset.meta.stats for dataset in self.datasets], 
-                                     max_dims = {"action": max_action_dim, "observation.state": max_state_dim})
+                                     max_dim = max_action_dim)
+                                    #  max_dims = {"action": max_action_dim, "observation.state": max_state_dim})
         
         # save_to_json(self.stats, os.path.join("/home/cosmos/.cache/lerobot_data", f"{data_mix}_stats.json"))
         # save_to_json(self.stats, os.path.join("/mnt/wangxiaofa/robot_dataset/lerobot-format", f"{data_mix}_stats.json"))

@@ -606,7 +606,7 @@ def aggregate_stats_v2(stats_list: list[dict[str, dict]], max_dim = 32) -> dict[
 
     return aggregated_stats
 
-def aggregate_stats(stats_list: list[dict[str, dict]], max_dims = 32) -> dict[str, dict[str, np.ndarray]]:
+def aggregate_stats(stats_list: list[dict[str, dict]], max_dim = 32) -> dict[str, dict[str, np.ndarray]]:
     """Aggregate stats from multiple compute_stats outputs into a single set of stats.
 
     The final stats will have the union of all data keys from each of the stats dicts.
@@ -629,7 +629,7 @@ def aggregate_stats(stats_list: list[dict[str, dict]], max_dims = 32) -> dict[st
         # for dataset without ego_dex
         if key in ["action", "observation.state"]:
             pad_stats_with_key = []
-            max_dim = max_dims[key]
+            # max_dim = max_dims[key]
             for stats in stats_with_key: # for different dataset
                 if np.isnan(stats["mean"]).any() or np.isnan(stats["std"]).any() or np.isnan(stats["max"]).any() or np.isnan(stats["min"]).any():
                     print(f"Warning: NaN values found in stats for key '{key}'. Skipping this dataset in aggregation.")

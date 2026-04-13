@@ -71,6 +71,7 @@ while [[ $# -gt 0 ]]; do
 done
 export PATH=/home/aiscuser/.conda/envs/lerobot/bin:$PATH
 export LD_LIBRARY_PATH=/home/aiscuser/.conda/envs/lerobot/lib:$LD_LIBRARY_PATH
+PARENT_DIR="/mnt/wangxiaofa/robot_dataset/lerobot-format-v21-ort6d"
 ffmpeg
 uv run --no-sync --extra cu128 --group libero --python 3.10 \
     python test_ffmpeg.py
@@ -94,4 +95,5 @@ uv run --no-sync --extra cu128 --group libero --python 3.10 \
   dataloader_train.dataset.stage=$STAGE \
   dataloader_train.dataset.max_action_dim=$MAX_ACTION_DIM \
   dataloader_train.dataset.max_state_dim=$MAX_STATE_DIM \
-  dataloader_train.dataset.dataset_len_one_epoch=$DATASET_LEN
+  dataloader_train.dataset.dataset_len_one_epoch=$DATASET_LEN \
+  dataloader_train.dataset.parent_dir=$PARENT_DIR

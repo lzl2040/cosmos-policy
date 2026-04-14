@@ -40,13 +40,13 @@ def encode_t5_text_embeddings(t5_model, t5_tokenizer, prompts, max_length, devic
 text_model_type = "t5"
 torch_dtype = torch.float32
 device = "cuda"
-data_mix = "oxe_magic_soup_plus"
+data_mix = "robomind"
 process_chunk_size = 1
 max_length = 512
 hidden_size = 1024
 max_task_chunk = 40000
 text_embeddings_dict = {}
-save_root = "/mnt/wangxiaofa/robot_dataset/lerobot-format/t5_embeddings"
+save_root = "/mnt/wangxiaofa/robot_dataset/lerobot-format-v21-ort6d/t5_embeddings"
 os.makedirs(save_root, exist_ok=True)
 if text_model_type == "t5":
     # ckpt_path = "/Data/lzl/huggingface/t5-11b"

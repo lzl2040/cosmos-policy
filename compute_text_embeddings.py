@@ -56,7 +56,7 @@ if text_model_type == "t5":
     text_encoder.eval()
     val2root_json_path = "vla2root.json"
     # data_root = "/Data/lerobot_data"
-    data_root = "/mnt/wangxiaofa/robot_dataset/lerobot-format"
+    data_root = "/mnt/wangxiaofa/robot_dataset/lerobot-format-v21-ort6d"
     mixture_sets = OXE_NAMED_MIXTURES[data_mix]
     process_datasets = []
     for d_name, d_weight in mixture_sets:

@@ -524,16 +524,47 @@ def _assert_type_and_shape(stats_list: list[dict[str, dict]]):
     for i in range(len(stats_list)):
         for fkey in stats_list[i]:
             for k, v in stats_list[i][fkey].items():
+
+                # ---- 类型转换 ----
                 if not isinstance(v, np.ndarray):
-                    raise ValueError(
-                        f"Stats must be composed of numpy array, but key '{k}' of feature '{fkey}' is of type '{type(v)}' instead."
-                    )
+
+                    if isinstance(v, torch.Tensor):
+                        if v.requires_grad:
+                            v = v.detach()
+                        if v.device.type != "cpu":
+                            v = v.cpu()
+                        v = v.numpy()
+
+                    elif isinstance(v, (list, tuple)):
+                        v = np.asarray(v)
+
+                    elif isinstance(v, (int, float, np.number)):
+                        v = np.asarray([v])
+
+                    elif v is None:
+                        raise ValueError(f"Value of '{k}' in feature '{fkey}' is None.")
+
+                    else:
+                        raise TypeError(
+                            f"Unsupported type for key '{k}' of feature '{fkey}': {type(v)}"
+                        )
+
+                    stats_list[i][fkey][k] = v
+
+                # ---- 检查维度 ----
                 if v.ndim == 0:
-                    raise ValueError("Number of dimensions must be at least 1, and is 0 instead.")
+                    v = v.reshape(1)
+                    stats_list[i][fkey][k] = v
+
+                # ---- 检查 shape ----
                 if k == "count" and v.shape != (1,):
-                    raise ValueError(f"Shape of 'count' must be (1), but is {v.shape} instead.")
+                    raise ValueError(f"Shape of 'count' must be (1,), but is {v.shape} instead.")
+
                 if "image" in fkey and k != "count" and v.shape != (3, 1, 1):
-                    raise ValueError(f"Shape of '{k}' must be (3,1,1), but is {v.shape} instead.")
+                    raise ValueError(
+                        f"Shape of '{k}' for feature '{fkey}' must be (3, 1, 1), but is {v.shape} instead."
+                    )
+    return stats_list
 
 
 def aggregate_feature_stats(stats_ft_list: list[dict[str, dict]]) -> dict[str, dict[str, np.ndarray]]:
@@ -618,7 +649,7 @@ def aggregate_stats(stats_list: list[dict[str, dict]], max_dim = 32) -> dict[str
     - new_std = (std of all data)
     """
 
-    _assert_type_and_shape(stats_list)
+    stats_list = _assert_type_and_shape(stats_list)
 
     data_keys = {key for stats in stats_list for key in stats}
     aggregated_stats = {key: {} for key in data_keys}

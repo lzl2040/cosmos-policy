@@ -68,5 +68,16 @@
     "local_game_stardew": "GameData/D2E/Stardew_Valley",
     "game_stardew": "game_data/Stardew_Valley",
     "local_game_csgo": "GameData/D2E/Counter-Strike_2",
-    "game_csgo": "game_data/Counter-Strike_2"
+    "game_csgo": "game_data/Counter-Strike_2",
+    "robomind_franka_3rgb": "RoboMind_full/franka_3rgb",
+    "robomind_franka_1rgb": "RoboMind_full/franka_1rgb",
+    "robomind_agilex_3rgb": "RoboMind_full/agilex_3rgb",
+    "robomind_ur_1rgb": "RoboMind_full/ur_1rgb",
+    "robomind_franka_dual_arm": "RoboMind_full/franka_fr3_dual",
+    "interna1_dual_arm_0": "InternA1/dual_arm_0",
+    "interna1_dual_arm_1": "InternA1/dual_arm_1",
+    "interna1_dual_arm_2": "InternA1/dual_arm_2",
+    "interna1_dual_arm_3": "InternA1/dual_arm_3",
+    "interna1_dual_arm_4": "InternA1/dual_arm_4",
+    "interna1_single_arm": "InternA1/single_arm"
 }

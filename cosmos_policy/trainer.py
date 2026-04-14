@@ -145,12 +145,12 @@ class CosmosPolicyTrainer(ImaginaireTrainer):
                         continue
                     # Do the following when an actual optimizer (update) step has been made.
                     iteration += 1
-                    vm = psutil.virtual_memory()
-                    print(
-                        f"rank {local_rank} world:{world_rank} iter {iteration} "
-                        f"mem {vm.used/1024**3:.2f}/{vm.total/1024**3:.2f} GB "
-                        f"({vm.percent:.1f}%)"
-                    )
+                    # vm = psutil.virtual_memory()
+                    # print(
+                    #     f"rank {local_rank} world:{world_rank} iter {iteration} "
+                    #     f"mem {vm.used/1024**3:.2f}/{vm.total/1024**3:.2f} GB "
+                    #     f"({vm.percent:.1f}%)"
+                    # )
                     # Save checkpoint.
                     if iteration % self.config.checkpoint.save_iter == 0:
                         self.checkpointer.save(model, optimizer, scheduler, grad_scaler, iteration=iteration)

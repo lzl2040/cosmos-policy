@@ -51,7 +51,7 @@ libero_all_4_suites_dataset = L(MultiDatasetforDistTraining)(
     use_proprio=True,
     normalize_proprio=True,
     normalize_actions=True,
-    num_duplicates_per_image=4,  # WAN 2.1 tokenizer: 4 images per latent frame
+    num_duplicates_per_image=1,  # WAN 2.1 tokenizer: 4 images per latent frame
     use_stronger_image_aug=True,
     rollout_data_dir=os.path.join(
         BASE_DATASETS_DIR, "Libero_data", "Libero_data", "all_episodes"
@@ -68,8 +68,8 @@ libero_all_4_suites_dataset = L(MultiDatasetforDistTraining)(
     parent_dir="/mnt/wangxiaofa/robot_dataset/lerobot-format",
     vla2root_json="vla2root.json",
     balance_dataset_weights=True,
-    max_action_dim=16,
-    max_state_dim=16,
+    max_action_dim=32,
+    max_state_dim=32,
     dataset_len_one_epoch=5000
 )
 cosmos_predict2_2b_480p_libero = LazyDict(

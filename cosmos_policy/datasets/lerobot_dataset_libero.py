@@ -10,6 +10,7 @@ import polars as pl
 from pathlib import Path
 from typing import Callable, Dict
 from datetime import datetime
+import math
 
 import datasets
 import numpy as np
@@ -960,6 +961,7 @@ class LeRobotDataset(torch.utils.data.Dataset):
         # Add task as a string
         task_idx = item["task_index"].item()
         item["task"] = self.meta.tasks[task_idx]
+        item["fps"] = math.ceil(self.meta.info["fps"])
         item["dataset_name"] = self.dataset_name
 
         return item
@@ -1261,7 +1263,7 @@ class MultiDatasetforDistTraining(torch.utils.data.Dataset):
             use_wrist_images: bool = True,
             use_third_person_images: bool = True,
             use_proprio: bool = True,
-            num_duplicates_per_image: int = 4,
+            num_duplicates_per_image: int = 1,
             rollout_data_dir: str = "",
             demonstration_sampling_prob: float = 0.5,
             success_rollout_sampling_prob: float = 0.5,
@@ -1641,8 +1643,8 @@ class MultiDatasetforDistTraining(torch.utils.data.Dataset):
         IMAGE_WRIST = "observation.images.wrist"
         CURRENT_IDX = 0
         FUTURE_IDX = -1
-        first_input_image = np.expand_dims(np.zeros_like(item[IMAGE_PRIMARY][CURRENT_IDX]), axis=0)
-        image_list.append(first_input_image)
+        # first_input_image = np.expand_dims(np.zeros_like(item[IMAGE_PRIMARY][CURRENT_IDX]), axis=0)
+        # image_list.append(first_input_image)
         current_sequence_idx += 1
         
         # current state
@@ -1738,6 +1740,7 @@ class MultiDatasetforDistTraining(torch.utils.data.Dataset):
         )
         # print(images.shape) # torch.Size([37, 3, 256, 256])
         action_chunk = item["action"] # pad with last action
+        sample_rate = item["fps"]
         # print(torch.max(proprio), torch.min(proprio), proprio.shape)
         # print(images.shape, action_chunk.shape, proprio.shape, future_proprio.shape) # torch.Size([3, 37, 224, 224]) torch.Size([16, 32]) torch.Size([32]) torch.Size([32])
         # print(self.t5_text_embeddings.keys(), item["task"])
@@ -1776,6 +1779,7 @@ class MultiDatasetforDistTraining(torch.utils.data.Dataset):
             "future_image_latent_idx": future_image_latent_idx if self.use_third_person_images else -1,
             "future_image2_latent_idx": future_image2_latent_idx if self.use_third_person_images else -1,
             "value_function_return": float("-100"),
+            "sample_rate": sample_rate,
             # "next_action_chunk": next_action_chunk,
             # "next_value_function_return": next_value_function_return,
         }

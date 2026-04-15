@@ -62,6 +62,9 @@ from cosmos_policy._src.predict2.networks.model_weights_stats import WeightTrain
 from cosmos_policy._src.predict2.text_encoders.text_encoder import TextEncoder, TextEncoderConfig
 from cosmos_policy._src.predict2.tokenizers.base_vae import BaseVAE
 from cosmos_policy._src.predict2.utils.dtensor_helper import DTensorFastEmaModelUpdater, broadcast_dtensor_model_states
+# from cosmos_policy._src.predict2.models.ace_vision import VisionEncoder
+# from cosmos_policy._src.predict2.models.ace_action import ActionChunkEncoder, ACEConfig
+from cosmos_policy.models.ace import ACE
 
 IS_PREPROCESSED_KEY = "is_preprocessed"
 
@@ -108,6 +111,7 @@ class Text2WorldModelConfig:
     state_t: int = 8  # for latent model, ref to the latent number of frames
     resolution: str = "512"
     scaling: str = "edm"
+    device_id: int = 0
     rectified_flow_t_scaling_factor: float = 1.0
     rectified_flow_loss_weight_uniform: bool = True
     resize_online: bool = False  # whether or not resize the video online; usecase: we load a long duration video and resize to fewer frames, simulate low fps video. If true, it use tokenizer and state_t to infer the expected length of the resized video.
@@ -141,7 +145,8 @@ class DiffusionModel(ImaginaireModel):
             "float16": torch.float16,
             "bfloat16": torch.bfloat16,
         }[config.precision]
-        self.tensor_kwargs = {"device": "cuda", "dtype": self.precision}
+        # self.tensor_kwargs = {"device": f"cuda:{config.device_id}", "dtype": self.precision}
+        self.tensor_kwargs = {"device": f"cuda", "dtype": self.precision}
         log.warning(f"DiffusionModel: precision {self.precision}")
 
         # 1. set data keys and data information
@@ -158,13 +163,26 @@ class DiffusionModel(ImaginaireModel):
                 self.sigma_data, config.rectified_flow_t_scaling_factor, config.rectified_flow_loss_weight_uniform
             )
         )
+        # ace_pt_path = "/home/cosmos/.cache/cosmos_policy/ace/mp_rank_00_model_states.pt"
+        # vision_model_name: str = "/home/cosmos/.cache/siglip2-base-patch16-224"
+        
+        ace_pt_path = "/mnt/wangxiaofa/action_chunk_encoder_exp/0411_pretrain_ace_ms_data_v13_bs_32_/0411_pretrain_ace_ms_data_v13_bs_32_/global_step15000/mp_rank_00_model_states.pt"
+        vision_model_name: str = "/mnt/wangxiaofa/pt_weights/siglip2-base-patch16-224/"
+        
+        self.ace = ACE(vision_model_name=vision_model_name).to(self.precision)
+        weights = torch.load(ace_pt_path, map_location="cpu")["module"]
+        self.ace.load_state_dict(weights, strict=True)
 
         # 3. tokenizer
-        with misc.timer("DiffusionModel: set_up_tokenizer"):
-            self.tokenizer: BaseVAE = lazy_instantiate(config.tokenizer)
-            assert self.tokenizer.latent_ch == self.config.state_ch, (
-                f"latent_ch {self.tokenizer.latent_ch} != state_shape {self.config.state_ch}"
-            )
+        # with misc.timer("DiffusionModel: set_up_tokenizer"):
+        #     # self.tokenizer: BaseVAE = lazy_instantiate(config.tokenizer)
+        #     # assert self.tokenizer.latent_ch == self.config.state_ch, (
+        #     #     f"latent_ch {self.tokenizer.latent_ch} != state_shape {self.config.state_ch}"
+        #     # )
+        #     vision_model_name: str = "/home/cosmos/.cache/siglip2-base-patch16-224"
+        #     # vision_model_name: str = "/mnt/wangxiaofa/pt_weights/siglip2-base-patch16-224"
+        #     self.tokenizer = VisionEncoder(model_name=vision_model_name)
+            
 
         # 4. Set up loss options, including loss masking, loss reduce and loss scaling
         self.loss_reduce = getattr(config, "loss_reduce", "mean")
@@ -222,7 +240,7 @@ class DiffusionModel(ImaginaireModel):
             self._param_count = count_params(net, verbose=False)
 
             if self.fsdp_device_mesh:
-                net.fully_shard(mesh=self.fsdp_device_mesh)
+                # net.fully_shard(mesh=self.fsdp_device_mesh)
                 net = fully_shard(net, mesh=self.fsdp_device_mesh, reshard_after_forward=True)
 
             with misc.timer("meta to cuda and broadcast model states"):
@@ -310,8 +328,8 @@ class DiffusionModel(ImaginaireModel):
     def on_train_start(self, memory_format: torch.memory_format = torch.preserve_format) -> None:
         if self.config.ema.enabled:
             self.net_ema.to(dtype=torch.float32)
-        if hasattr(self.tokenizer, "reset_dtype"):
-            self.tokenizer.reset_dtype()
+        # if hasattr(self.tokenizer, "reset_dtype"):
+        #     self.tokenizer.reset_dtype()
         self.net = self.net.to(memory_format=memory_format, **self.tensor_kwargs)
 
         if hasattr(self.config, "use_torch_compile") and self.config.use_torch_compile:  # compatible with old config
@@ -387,6 +405,7 @@ class DiffusionModel(ImaginaireModel):
             x0_B_C_T_H_W, condition, epsilon_B_C_T_H_W, sigma_B_T
         )
 
+        # print(self.loss_reduce)
         if self.loss_reduce == "mean":
             kendall_loss = kendall_loss.mean() * self.loss_scale
         elif self.loss_reduce == "sum":
@@ -726,10 +745,15 @@ class DiffusionModel(ImaginaireModel):
         is_image_batch = self.is_image_batch(data_batch)
 
         # Latent state
+        # raw_state: [8, 3, 37, 224, 224]
         raw_state = data_batch[self.input_image_key if is_image_batch else self.input_data_key]
-        latent_state = self.encode(raw_state).contiguous().float()
+        output_dict = self.encode(raw_state)
+        latent_state = output_dict["vae_feature"].contiguous().float() # [8, 9, 16, 28, 28]
+        # latent_state = self.encode(raw_state).contiguous().float() # [4, 16, 9, 28, 28] # vae
+        latent_state = latent_state.permute(0, 2, 1, 3, 4)  # [4, 16, 9, 28, 28]
 
         # Condition
+        # print(self.conditioner, self.config.conditioner)
         condition = self.conditioner(data_batch)
         condition = condition.edit_data_type(DataType.IMAGE if is_image_batch else DataType.VIDEO)
         return raw_state, latent_state, condition
@@ -767,14 +791,16 @@ class DiffusionModel(ImaginaireModel):
                 )
             else:
                 assert data_batch[input_key].dtype == torch.uint8, "Video data is not in uint8 format."
-                data_batch[input_key] = data_batch[input_key].to(**self.tensor_kwargs) / 127.5 - 1.0
+                # print(torch.max(data_batch[input_key]))
+                # data_batch[input_key] = data_batch[input_key].to(**self.tensor_kwargs) / 127.5 - 1.0
+                data_batch[input_key] = data_batch[input_key].to(**self.tensor_kwargs) # 0-255
                 data_batch[IS_PREPROCESSED_KEY] = True
 
-            expected_length = self.tokenizer.get_pixel_num_frames(self.config.state_t)
-            original_length = data_batch[input_key].shape[2]
-            assert original_length == expected_length, (
-                f"Input video length doesn't match expected length specified by state_t: {original_length} != {expected_length}"
-            )
+            # expected_length = self.tokenizer.get_pixel_num_frames(self.config.state_t)
+            # original_length = data_batch[input_key].shape[2]
+            # assert original_length == expected_length, (
+            #     f"Input video length doesn't match expected length specified by state_t: {original_length} != {expected_length}"
+            # )
 
     def _augment_image_dim_inplace(self, data_batch: dict[str, Tensor], input_key: str = None) -> None:
         input_key = self.input_image_key if input_key is None else input_key
@@ -899,6 +925,7 @@ class DiffusionModel(ImaginaireModel):
         c_skip_B_1_T_1_1, c_out_B_1_T_1_1, c_in_B_1_T_1_1, c_noise_B_1_T_1_1 = self.scaling(sigma=sigma_B_1_T_1_1)
 
         # forward pass through the network
+        # print(xt_B_C_T_H_W.shape, c_in_B_1_T_1_1.shape)
         net_output_B_C_T_H_W = self.net(
             x_B_C_T_H_W=(xt_B_C_T_H_W * c_in_B_1_T_1_1).to(
                 **self.tensor_kwargs
@@ -982,11 +1009,13 @@ class DiffusionModel(ImaginaireModel):
 
     @torch.no_grad()
     def encode(self, state: torch.Tensor) -> torch.Tensor:
-        return self.tokenizer.encode(state) * self.sigma_data
+        # print(state.device)
+        # return self.tokenizer.encode(state) * self.sigma_data
+        return self.ace.vision_model(state)
 
-    @torch.no_grad()
-    def decode(self, latent: torch.Tensor) -> torch.Tensor:
-        return self.tokenizer.decode(latent / self.sigma_data)
+    # @torch.no_grad()
+    # def decode(self, latent: torch.Tensor) -> torch.Tensor:
+        # return self.tokenizer.decode(latent / self.sigma_data)
 
     def get_video_height_width(self) -> Tuple[int, int]:
         return VIDEO_RES_SIZE_INFO[self.config.resolution]["9,16"]

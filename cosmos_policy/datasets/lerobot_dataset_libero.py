@@ -225,20 +225,20 @@ class LeRobotDatasetMetadata:
         self.tasks, self.task_to_task_index = load_tasks(self.root)
         self.episodes = load_episodes(self.root)
         self.stats = load_stats(self.root)
-        # if self.stats == None:
-        #     episodes_stats = load_episodes_stats(self.root)
-        #     self.stats = aggregate_stats(list(episodes_stats.values()))
-        #     episodes_stats.clear()
-        #     del episodes_stats
-        
-        if self._version < packaging.version.parse("v2.1"):
-            self.stats = load_stats(self.root)
-            self.episodes_stats = backward_compatible_episodes_stats(self.stats, self.episodes)
-        else:
+        if self.stats == None:
             episodes_stats = load_episodes_stats(self.root)
             self.stats = aggregate_stats(list(episodes_stats.values()))
             episodes_stats.clear()
             del episodes_stats
+        
+        # if self._version < packaging.version.parse("v2.1"):
+        #     self.stats = load_stats(self.root)
+        #     self.episodes_stats = backward_compatible_episodes_stats(self.stats, self.episodes)
+        # else:
+        #     episodes_stats = load_episodes_stats(self.root)
+        #     self.stats = aggregate_stats(list(episodes_stats.values()))
+        #     episodes_stats.clear()
+        #     del episodes_stats
 
     def pull_from_repo(
         self,

@@ -294,6 +294,38 @@ OXE_NAMED_MIXTURES: Dict[str, List[Tuple[str, float]]] = {
         # ("interna1_single_arm", 0.1),
     ],
     
+    "ms_complete_data_oxe":[
+        ("berkeley_cable_routing", 1.0),
+        ("fractal20220817_data", 0.54087122203),                # Google RT-1 Robot Data (Large-Scale)
+        ("kuka", 0.8341046294),
+        ("bridge_orig", 1.0),                                   # Original Version of Bridge V2 from Project Website
+        ("taco_play", 2.0),
+        ("jaco_play", 1.0),
+        ("roboturk", 2.0),
+        ("viola", 2.0),
+        ("berkeley_autolab_ur5", 2.0),
+        ("toto", 1.0),
+        ("language_table", 0.1),
+        ("stanford_hydra_dataset_converted_externally_to_rlds", 2.0),
+        # ("austin_buds_dataset_converted_externally_to_rlds", 1.0), # state is not quant or rpy
+        ("nyu_franka_play_dataset_converted_externally_to_rlds", 3.0),
+        ("furniture_bench_dataset_converted_externally_to_rlds", 0.1),
+        ("ucsd_kitchen_dataset_converted_externally_to_rlds", 2.0),
+        ("austin_sailor_dataset_converted_externally_to_rlds", 1.0),
+        ("austin_sirius_dataset_converted_externally_to_rlds", 1.0),
+        ("dlr_edan_shared_control_converted_externally_to_rlds", 1.0),
+        ("iamlab_cmu_pickup_insert_converted_externally_to_rlds", 1.0),
+        ("utaustin_mutex", 1.0),
+        # ("berkeley_fanuc_manipulation", 2.0), # state is not quant or rpy
+        ("cmu_stretch", 1.0),
+        ## New Datasets in MagicSoup++
+        ("bc_z", 0.2),                                          # Note: use v0.1.0 --> later versions broken
+        ("fmb_dataset", 1.0),
+        ("dobbe", 0.2),
+        ("droid", 0.01),
+        ("agibot_alpha", 0.1),
+    ],
+    
     "robomind":[
         ("robomind_franka_dual_arm", 1.0),
         ("robomind_franka_3rgb", 1.0),

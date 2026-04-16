@@ -166,12 +166,13 @@ class DiffusionModel(ImaginaireModel):
         # ace_pt_path = "/home/cosmos/.cache/cosmos_policy/ace/mp_rank_00_model_states.pt"
         # vision_model_name: str = "/home/cosmos/.cache/siglip2-base-patch16-224"
         
-        ace_pt_path = "/mnt/wangxiaofa/action_chunk_encoder_exp/0411_pretrain_ace_ms_data_v13_bs_32_/0411_pretrain_ace_ms_data_v13_bs_32_/global_step20000/mp_rank_00_model_states.pt"
+        ace_pt_path = "/mnt/wangxiaofa/action_chunk_encoder_exp/0411_pretrain_ace_ms_data_v13_bs_32_/0411_pretrain_ace_ms_data_v13_bs_32_/global_step25000/mp_rank_00_model_states.pt"
         vision_model_name: str = "/mnt/wangxiaofa/pt_weights/siglip2-base-patch16-224/"
         
         self.ace = ACE(vision_model_name=vision_model_name).to(self.precision)
         weights = torch.load(ace_pt_path, map_location="cpu")["module"]
         self.ace.load_state_dict(weights, strict=True)
+        print(f"Load ace weights from:{ace_pt_path}")
 
         # 3. tokenizer
         # with misc.timer("DiffusionModel: set_up_tokenizer"):

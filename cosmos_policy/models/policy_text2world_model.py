@@ -249,10 +249,10 @@ class CosmosPolicyDiffusionModel(BaseDiffusionModel):
         )
         
         # ace weights
-        ace_pt_path = "/home/cosmos/.cache/cosmos_policy/ace/mp_rank_00_model_states.pt"
-        vision_model_name: str = "/home/cosmos/.cache/siglip2-base-patch16-224"
+        # ace_pt_path = "/home/cosmos/.cache/cosmos_policy/ace/mp_rank_00_model_states.pt"
+        # vision_model_name: str = "/home/cosmos/.cache/siglip2-base-patch16-224"
         
-        self.ace = ACE(vision_model_name=vision_model_name).to(self.precision)
+        # self.ace = ACE(vision_model_name=vision_model_name).to(self.precision)
         
         self.action_group_size = 4
         # vision_model_name: str = "/mnt/wangxiaofa/pt_weights/siglip2-base-patch16-224"

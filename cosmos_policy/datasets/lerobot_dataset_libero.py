@@ -1579,6 +1579,94 @@ class MultiDatasetforDistTraining(torch.utils.data.Dataset):
         )
         item["observation.state"] = 2.0 * (item["observation.state"] - state_q01) / denom - 1.0
         return item
+
+    def norm_data_with_mean_std_ort6d(self, item):
+        key_mean = "mean"
+        key_std = "std"
+
+        if "agi" in item['dataset_name'] or "agilex" in item['dataset_name'] or "dual" in item['dataset_name']:
+            xyz_dims = [0, 1, 2, 10, 11, 12]
+        else:
+            xyz_dims = [0, 1, 2]
+
+        action = item["action"].clone()
+        state = item["observation.state"].clone()
+
+        # ===== action =====
+        action_mean = self.stats["action"][key_mean][xyz_dims].to(
+            device=action.device, dtype=action.dtype
+        )
+        action_std = self.stats["action"][key_std][xyz_dims].to(
+            device=action.device, dtype=action.dtype
+        )
+
+        action_std = torch.where(
+            action_std == 0,
+            torch.tensor(1e-8, device=action.device, dtype=action.dtype),
+            action_std
+        )
+
+        action[..., xyz_dims] = (action[..., xyz_dims] - action_mean) / action_std
+
+        # ===== state =====
+        state_mean = self.stats["observation.state"][key_mean][xyz_dims].to(
+            device=state.device, dtype=state.dtype
+        )
+        state_std = self.stats["observation.state"][key_std][xyz_dims].to(
+            device=state.device, dtype=state.dtype
+        )
+
+        state_std = torch.where(
+            state_std == 0,
+            torch.tensor(1e-8, device=state.device, dtype=state.dtype),
+            state_std
+        )
+
+        state[..., xyz_dims] = (state[..., xyz_dims] - state_mean) / state_std
+
+        item["action"] = action
+        item["observation.state"] = state
+        return item
+    
+    def norm_data_with_min_max_ort6d(self, item):
+        # key1 = "min"
+        # key2 = "max"
+        key1 = "min"
+        key2 = "max"
+        state_q01 = torch.ones(self.max_state_dim) * -1
+        state_q99 = torch.ones(self.max_state_dim)
+        action_q01 = torch.ones(self.max_action_dim) * -1
+        action_q99 = torch.ones(self.max_action_dim)
+        action_mask = torch.zeros(self.max_action_dim)
+        action_start_dim = 0
+        action_end_dim = 0
+        state_start_dim = 0
+        state_end_dim = 0
+        if "agi" in item['dataset_name'] or "agilex" in item['dataset_name'] or "dual" in item['dataset_name']:
+            action_end_dim = 20
+            state_end_dim = 20
+        else:
+            action_end_dim = 10
+            state_end_dim = 10
+        
+        state_q01[state_start_dim:state_end_dim] = self.stats["observation.state"][key1][state_start_dim:state_end_dim]
+        state_q99[state_start_dim:state_end_dim] = self.stats["observation.state"][key2][state_start_dim:state_end_dim]
+        action_q01[action_start_dim:action_end_dim] = self.stats["action"][key1][action_start_dim:action_end_dim]
+        action_q99[action_start_dim:action_end_dim] = self.stats["action"][key2][action_start_dim:action_end_dim]
+        # action
+        denom = action_q99 - action_q01
+        denom = torch.where(
+            denom == 0, torch.tensor(1e-8), denom
+        )
+        item["action"] = 2.0 * (item["action"] - action_q01) / denom - 1.0
+        
+        # state
+        denom = state_q99 - state_q01
+        denom = torch.where(
+            denom == 0, torch.tensor(1e-8), denom
+        )
+        item["observation.state"] = 2.0 * (item["observation.state"] - state_q01) / denom - 1.0
+        return item
     
     def __getitem__(self, index):
         # item = self.full_dataset[index]
@@ -1610,7 +1698,8 @@ class MultiDatasetforDistTraining(torch.utils.data.Dataset):
         
         # prepare state and action
         item = self.prepare_action_state(item)
-        item = self.norm_data_with_quantile(item) # follow cosmos policy
+        # cosmos policy use min-max
+        item = self.norm_data_with_mean_std_ort6d(item)
         
         # unified the image keys
         

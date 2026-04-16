@@ -88,6 +88,41 @@ class ActionEncoding(IntEnum):
 
 # === Individual Dataset Configs ===
 OXE_DATASET_CONFIGS = {
+    "robomind_franka_dual_arm":{
+        "image_obs_keys": {"primary": "camera_front", "secondary": "camera_top", "wrist": "camera_right"},
+        "depth_obs_keys": {"primary": None, "secondary": None, "wrist": None},
+        "state_obs_keys": ["all"],
+        "state_encoding": StateEncoding.POS_QUAT,
+        "action_encoding": ActionEncoding.EEF_POS
+    },
+    "robomind_ur_1rgb":{
+        "image_obs_keys": {"primary": "camera_top", "secondary": None, "wrist": None},
+        "depth_obs_keys": {"primary": None, "secondary": None, "wrist": None},
+        "state_obs_keys": ["all"],
+        "state_encoding": StateEncoding.POS_QUAT,
+        "action_encoding": ActionEncoding.EEF_POS
+    },
+    "robomind_franka_3rgb":{
+        "image_obs_keys": {"primary": "camera_top", "secondary": "camera_left", "wrist": "camera_right"},
+        "depth_obs_keys": {"primary": None, "secondary": None, "wrist": None},
+        "state_obs_keys": ["all"],
+        "state_encoding": StateEncoding.POS_QUAT,
+        "action_encoding": ActionEncoding.EEF_POS
+    },
+    "robomind_franka_1rgb":{
+        "image_obs_keys": {"primary": "camera_top", "secondary": None, "wrist": None},
+        "depth_obs_keys": {"primary": None, "secondary": None, "wrist": None},
+        "state_obs_keys": ["all"],
+        "state_encoding": StateEncoding.POS_QUAT,
+        "action_encoding": ActionEncoding.EEF_POS
+    },
+    "robomind_agilex_3rgb":{
+        "image_obs_keys": {"primary": "camera_front", "secondary": "camera_left_wrist", "wrist": "camera_right_wrist"},
+        "depth_obs_keys": {"primary": None, "secondary": None, "wrist": None},
+        "state_obs_keys": ["all"],
+        "state_encoding": StateEncoding.POS_QUAT,
+        "action_encoding": ActionEncoding.EEF_POS
+    },
     "agibot_alpha":{
         "image_obs_keys": {"primary": "top_head", "secondary": "hand_left", "wrist": "hand_right"},
         "depth_obs_keys": {"primary": None, "secondary": None, "wrist": None},

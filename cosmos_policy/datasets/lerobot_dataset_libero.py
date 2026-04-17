@@ -1747,7 +1747,7 @@ class MultiDatasetforDistTraining(torch.utils.data.Dataset):
         FUTURE_IDX = -1
         # first_input_image = np.expand_dims(np.zeros_like(item[IMAGE_PRIMARY][CURRENT_IDX]), axis=0)
         # image_list.append(first_input_image)
-        current_sequence_idx += 1
+        # current_sequence_idx += 1
         
         # current state
         if self.use_proprio:

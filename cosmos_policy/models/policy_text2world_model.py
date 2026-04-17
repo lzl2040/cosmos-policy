@@ -424,13 +424,13 @@ class CosmosPolicyDiffusionModel(BaseDiffusionModel):
         with torch.no_grad():
             action_embeddings = self.ace.action_encoder(action_chunk, sample_rate)  # 8 4 768, [B, chunk_size, action_dim] -> [B, chunk_size // group_size, hidden_dim]
         
-        proprio_temp = proprio.unsqueeze(1).expand(-1, action_chunk.shape[1], -1)  # [B, 1, proprio_dim] to be repeated in the latent volume
-        future_proprio_temp = future_proprio.unsqueeze(1).expand(-1, action_chunk.shape[1], -1)  # [B, chunk_size, proprio_dim] to be repeated in the latent volume
-        with torch.no_grad():
-            state_embeddings = self.ace.action_encoder(proprio_temp.contiguous(), sample_rate)  # 8 4 768
-            state_embeddings = state_embeddings.mean(dim=1, keepdim=False)  # B hidden_dim
-            future_state_embeddings = self.ace.action_encoder(future_proprio_temp.contiguous(), sample_rate)  # 8 4 768, [B, proprio_dim] -> [B, 1, hidden_dim]
-            future_state_embeddings = future_state_embeddings.mean(dim=1, keepdim=False)
+        # proprio_temp = proprio.unsqueeze(1).expand(-1, action_chunk.shape[1], -1)  # [B, 1, proprio_dim] to be repeated in the latent volume
+        # future_proprio_temp = future_proprio.unsqueeze(1).expand(-1, action_chunk.shape[1], -1)  # [B, chunk_size, proprio_dim] to be repeated in the latent volume
+        # with torch.no_grad():
+        #     state_embeddings = self.ace.action_encoder(proprio_temp.contiguous(), sample_rate)  # 8 4 768
+        #     state_embeddings = state_embeddings.mean(dim=1, keepdim=False)  # B hidden_dim
+        #     future_state_embeddings = self.ace.action_encoder(future_proprio_temp.contiguous(), sample_rate)  # 8 4 768, [B, proprio_dim] -> [B, 1, hidden_dim]
+        #     future_state_embeddings = future_state_embeddings.mean(dim=1, keepdim=False)
         
         # Action
         x0_B_C_T_H_W = replace_latent_with_action_chunk(
@@ -443,16 +443,16 @@ class CosmosPolicyDiffusionModel(BaseDiffusionModel):
         if torch.all(current_proprio_indices != -1):  # -1 indicates proprio is not used
             x0_B_C_T_H_W = replace_latent_with_proprio(
                 x0_B_C_T_H_W,
-                state_embeddings,
-                # proprio,
+                # state_embeddings,
+                proprio,
                 proprio_indices=current_proprio_indices,
             )
         # Future proprio
         if torch.all(future_proprio_indices != -1):  # -1 indicates future proprio is not used
             x0_B_C_T_H_W = replace_latent_with_proprio(
                 x0_B_C_T_H_W,
-                future_state_embeddings,
-                # future_proprio,
+                # future_state_embeddings,
+                future_proprio,
                 proprio_indices=future_proprio_indices,
             )
         # Value
@@ -624,14 +624,17 @@ class CosmosPolicyDiffusionModel(BaseDiffusionModel):
         kendall_loss_action_l1_loss = torch.abs(pred_action - action_chunk).mean()
         
         # for state decoding
-        state_shape = (1, state_embeddings.shape[1])
-        pred_state_embeds = extract_action_chunk_from_latent_sequence(model_pred.x0, state_shape, future_proprio_indices)
-        pred_state = self.state_decoder(pred_state_embeds)
-        kendall_loss_state_mse_loss = ((pred_state - future_proprio) ** 2).mean()
-        kendall_loss_state_l1_loss = torch.abs(pred_state - future_proprio).mean()
+        # state_shape = (1, state_embeddings.shape[1])
+        # pred_state_embeds = extract_action_chunk_from_latent_sequence(model_pred.x0, state_shape, future_proprio_indices)
+        # pred_state = self.state_decoder(pred_state_embeds)
+        # kendall_loss_state_mse_loss = ((pred_state - future_proprio) ** 2).mean()
+        # kendall_loss_state_l1_loss = torch.abs(pred_state - future_proprio).mean()
+        kendall_loss_state_mse_loss = kendall_loss_action_mse_loss
+        kendall_loss_state_l1_loss = kendall_loss_action_l1_loss
         
         # print(kendall_loss_action_mse_loss)
-        kendall_loss = kendall_loss_action_mse_loss + kendall_loss_wo_action + kendall_loss_state_mse_loss
+        kendall_loss = kendall_loss_action_mse_loss + kendall_loss_wo_action
+        # kendall_loss = kendall_loss_action_mse_loss + kendall_loss_wo_action + kendall_loss_state_mse_loss
 
         # Apply the loss mask to the loss
         if (

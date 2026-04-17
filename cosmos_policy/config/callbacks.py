@@ -62,6 +62,13 @@ class WandbCallback(WandBCallbackImage):
         self.train_final_loss_log = _LossRecord()
         self.train_demo_sample_action_mse_loss_log = _LossRecordNoEDM()
         self.train_demo_sample_action_l1_loss_log = _LossRecordNoEDM()
+        
+        self.train_action_mse_loss = _LossRecordNoEDM()
+        self.train_action_l1_loss = _LossRecordNoEDM()
+        
+        self.train_state_mse_loss = _LossRecordNoEDM()
+        self.train_state_l1_loss = _LossRecordNoEDM()
+        
         self.train_demo_sample_future_proprio_mse_loss_log = _LossRecordNoEDM()
         self.train_demo_sample_future_proprio_l1_loss_log = _LossRecordNoEDM()
         self.train_demo_sample_future_wrist_image_mse_loss_log = _LossRecordNoEDM()
@@ -155,6 +162,28 @@ class WandbCallback(WandBCallbackImage):
             if not torch.isnan(demo_sample_action_l1_loss):
                 self.train_demo_sample_action_l1_loss_log.loss += demo_sample_action_l1_loss
                 self.train_demo_sample_action_l1_loss_log.iter_count += 1
+            
+            demo_action_mse_loss = output_batch["action_mse_loss"]
+            if not torch.isnan(demo_action_mse_loss):
+                self.train_action_mse_loss.loss += demo_action_mse_loss
+                self.train_action_mse_loss.iter_count += 1
+            
+            demo_action_l1_loss = output_batch["action_l1_loss"]
+            if not torch.isnan(demo_action_l1_loss):
+                self.train_action_l1_loss.loss += demo_action_l1_loss
+                self.train_action_l1_loss.iter_count += 1
+                
+            
+            demo_state_mse_loss = output_batch["state_mse_loss"]
+            if not torch.isnan(demo_state_mse_loss):
+                self.train_state_mse_loss.loss += demo_state_mse_loss
+                self.train_state_mse_loss.iter_count += 1
+            
+            demo_state_l1_loss = output_batch["state_l1_loss"]
+            if not torch.isnan(demo_state_l1_loss):
+                self.train_state_l1_loss.loss += demo_state_l1_loss
+                self.train_state_l1_loss.iter_count += 1
+            
             demo_sample_future_proprio_mse_loss = output_batch["demo_sample_future_proprio_mse_loss"].detach().float()
             if not torch.isnan(demo_sample_future_proprio_mse_loss):
                 self.train_demo_sample_future_proprio_mse_loss_log.loss += demo_sample_future_proprio_mse_loss
@@ -279,6 +308,12 @@ class WandbCallback(WandBCallbackImage):
             avg_demo_sample_future_image_l1_loss = self.train_demo_sample_future_image_l1_loss_log.get_stat()
             avg_demo_sample_value_mse_loss = self.train_demo_sample_value_mse_loss_log.get_stat()
             avg_demo_sample_value_l1_loss = self.train_demo_sample_value_l1_loss_log.get_stat()
+            
+            avg_action_mse_loss = self.train_action_mse_loss.get_stat()
+            avg_action_l1_loss = self.train_action_l1_loss.get_stat()
+            
+            avg_state_mse_loss = self.train_state_mse_loss.get_stat()
+            avg_state_l1_loss = self.train_state_l1_loss.get_stat()
 
             avg_world_model_sample_future_proprio_mse_loss = (
                 self.train_world_model_sample_future_proprio_mse_loss_log.get_stat()
@@ -339,6 +374,10 @@ class WandbCallback(WandBCallbackImage):
                         f"train{self.wandb_extra_tag}/value_function_sample_value_l1_loss": avg_value_function_sample_value_l1_loss,
                         f"train{self.wandb_extra_tag}/train_img_unstable_count": self.train_img_unstable_count.item(),
                         f"train{self.wandb_extra_tag}/train_video_unstable_count": self.train_video_unstable_count.item(),
+                        f"train{self.wandb_extra_tag}/train_action_mse_loss": avg_action_mse_loss,
+                        f"train{self.wandb_extra_tag}/train_action_l1_loss": avg_action_l1_loss,
+                        f"train{self.wandb_extra_tag}/train_state_mse_loss": avg_state_mse_loss,
+                        f"train{self.wandb_extra_tag}/train_state_l1_loss": avg_state_l1_loss,
                         "iteration": iteration,
                         "sample_counter": getattr(self.trainer, "sample_counter", iteration),
                     }

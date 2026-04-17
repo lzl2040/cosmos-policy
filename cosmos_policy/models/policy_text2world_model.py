@@ -245,7 +245,12 @@ class CosmosPolicyDiffusionModel(BaseDiffusionModel):
         self.action_decoder = nn.Sequential(
             nn.Linear(768, 256),
             nn.SiLU(),
-            nn.Linear(256, 128),
+            nn.Linear(256, 128), # 128 = 32 * group_size
+        )
+        self.state_decoder = nn.Sequential(
+            nn.Linear(768, 256),
+            nn.SiLU(),
+            nn.Linear(256, 32), # 32 = max_action_dim
         )
         
         # ace weights
@@ -419,13 +424,13 @@ class CosmosPolicyDiffusionModel(BaseDiffusionModel):
         with torch.no_grad():
             action_embeddings = self.ace.action_encoder(action_chunk, sample_rate)  # 8 4 768, [B, chunk_size, action_dim] -> [B, chunk_size // group_size, hidden_dim]
         
-        # proprio = proprio.unsqueeze(1).expand(-1, action_chunk.shape[1], -1)  # [B, 1, proprio_dim] to be repeated in the latent volume
-        # future_proprio = future_proprio.unsqueeze(1).expand(-1, action_chunk.shape[1], -1)  # [B, 1, proprio_dim] to be repeated in the latent volume
-        # with torch.no_grad():
-        #     state_embeddings = self.ace.action_encoder(proprio.contiguous(), sample_rate)  # 8 4 768, [B, proprio_dim] -> [B, 1, hidden_dim]
-        #     state_embeddings = state_embeddings.mean(dim=1, keepdim=False)  # B hidden_dim
-        #     future_state_embeddings = self.ace.action_encoder(future_proprio.contiguous(), sample_rate)  # 8 4 768, [B, proprio_dim] -> [B, 1, hidden_dim]
-        #     future_state_embeddings = future_state_embeddings.mean(dim=1, keepdim=False)
+        proprio_temp = proprio.unsqueeze(1).expand(-1, action_chunk.shape[1], -1)  # [B, 1, proprio_dim] to be repeated in the latent volume
+        future_proprio_temp = future_proprio.unsqueeze(1).expand(-1, action_chunk.shape[1], -1)  # [B, chunk_size, proprio_dim] to be repeated in the latent volume
+        with torch.no_grad():
+            state_embeddings = self.ace.action_encoder(proprio_temp.contiguous(), sample_rate)  # 8 4 768
+            state_embeddings = state_embeddings.mean(dim=1, keepdim=False)  # B hidden_dim
+            future_state_embeddings = self.ace.action_encoder(future_proprio_temp.contiguous(), sample_rate)  # 8 4 768, [B, proprio_dim] -> [B, 1, hidden_dim]
+            future_state_embeddings = future_state_embeddings.mean(dim=1, keepdim=False)
         
         # Action
         x0_B_C_T_H_W = replace_latent_with_action_chunk(
@@ -438,16 +443,16 @@ class CosmosPolicyDiffusionModel(BaseDiffusionModel):
         if torch.all(current_proprio_indices != -1):  # -1 indicates proprio is not used
             x0_B_C_T_H_W = replace_latent_with_proprio(
                 x0_B_C_T_H_W,
-                # state_embeddings,
-                proprio,
+                state_embeddings,
+                # proprio,
                 proprio_indices=current_proprio_indices,
             )
         # Future proprio
         if torch.all(future_proprio_indices != -1):  # -1 indicates future proprio is not used
             x0_B_C_T_H_W = replace_latent_with_proprio(
                 x0_B_C_T_H_W,
-                # future_state_embeddings,
-                future_proprio,
+                future_state_embeddings,
+                # future_proprio,
                 proprio_indices=future_proprio_indices,
             )
         # Value
@@ -605,19 +610,28 @@ class CosmosPolicyDiffusionModel(BaseDiffusionModel):
         
         kendall_loss = edm_loss_B_C_T_H_W
         kendall_loss[:, :, action_indices] = 0.0
+        kendall_loss[:, :, future_proprio_indices] = 0.0
         
         kendall_loss_wo_action = kendall_loss.mean()
+        
+        # for action decoding
         action_shape = action_embeddings.shape[1:]
         pred_action_embeds = extract_action_chunk_from_latent_sequence(model_pred.x0, action_shape, action_indices)
-        # print(pred_action_embeds.shape) # 8 4 768
-        # import time
-        # time.sleep(100)
         pred_action = self.action_decoder(pred_action_embeds)  # [B, chunk_size // group_size, action_dim]
         pred_action = pred_action.view(pred_action.shape[0], pred_action.shape[1], self.action_group_size, -1) 
         pred_action = pred_action.view(pred_action.shape[0], -1, pred_action.shape[-1])  # [B, chunk_size, action_dim]
         kendall_loss_action_mse_loss = ((pred_action - action_chunk) ** 2).mean()
+        kendall_loss_action_l1_loss = torch.abs(pred_action - action_chunk).mean()
+        
+        # for state decoding
+        state_shape = (1, state_embeddings.shape[1])
+        pred_state_embeds = extract_action_chunk_from_latent_sequence(model_pred.x0, state_shape, future_proprio_indices)
+        pred_state = self.state_decoder(pred_state_embeds)
+        kendall_loss_state_mse_loss = ((pred_state - future_proprio) ** 2).mean()
+        kendall_loss_state_l1_loss = torch.abs(pred_state - future_proprio).mean()
+        
         # print(kendall_loss_action_mse_loss)
-        kendall_loss = kendall_loss_action_mse_loss + kendall_loss_wo_action
+        kendall_loss = kendall_loss_action_mse_loss + kendall_loss_wo_action + kendall_loss_state_mse_loss
 
         # Apply the loss mask to the loss
         if (
@@ -742,6 +756,9 @@ class CosmosPolicyDiffusionModel(BaseDiffusionModel):
             "mse_loss": pred_mse_B_C_T_H_W.mean(),
             # "mse_loss": mse_loss,
             "action_mse_loss": kendall_loss_action_mse_loss,
+            "action_l1_loss": kendall_loss_action_l1_loss,
+            "state_mse_loss": kendall_loss_state_mse_loss,
+            "state_l1_loss": kendall_loss_state_l1_loss,
             "edm_loss": edm_loss_B_C_T_H_W.mean(),
             "edm_loss_per_frame": torch.mean(edm_loss_B_C_T_H_W, dim=[1, 3, 4]),
             # Demo sample losses

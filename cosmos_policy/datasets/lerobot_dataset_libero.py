@@ -1583,49 +1583,62 @@ class MultiDatasetforDistTraining(torch.utils.data.Dataset):
     def norm_data_with_mean_std_ort6d(self, item):
         key_mean = "mean"
         key_std = "std"
+        state_mean = torch.ones(self.max_state_dim) * 0.0
+        state_std = torch.ones(self.max_state_dim) * 1.0
+        action_mean = torch.ones(self.max_action_dim) * 0.0
+        action_std = torch.ones(self.max_action_dim) * 1.0
 
         if "agi" in item['dataset_name'] or "agilex" in item['dataset_name'] or "dual" in item['dataset_name']:
             xyz_dims = [0, 1, 2, 10, 11, 12]
         else:
             xyz_dims = [0, 1, 2]
+        
+        
+        state_mean[xyz_dims] = self.stats["observation.state"][key_mean][xyz_dims].to(dtype=state_mean.dtype)
+        state_std[xyz_dims] = self.stats["observation.state"][key_std][xyz_dims].to(dtype=state_mean.dtype)
+        action_mean[xyz_dims] = self.stats["action"][key_mean][xyz_dims].to(dtype=state_mean.dtype)
+        action_std[xyz_dims] = self.stats["action"][key_std][xyz_dims].to(dtype=state_mean.dtype)
+        
+        item["action"] = (item["action"] - action_mean) / (action_std + 1e-8)
+        item["observation.state"] = (item["observation.state"] - state_mean)    / (state_std + 1e-8)
+        
+        # action = item["action"].clone()
+        # state = item["observation.state"].clone()
 
-        action = item["action"].clone()
-        state = item["observation.state"].clone()
+        # # ===== action =====
+        # action_mean = self.stats["action"][key_mean][xyz_dims].to(
+        #     device=action.device, dtype=action.dtype
+        # )
+        # action_std = self.stats["action"][key_std][xyz_dims].to(
+        #     device=action.device, dtype=action.dtype
+        # )
 
-        # ===== action =====
-        action_mean = self.stats["action"][key_mean][xyz_dims].to(
-            device=action.device, dtype=action.dtype
-        )
-        action_std = self.stats["action"][key_std][xyz_dims].to(
-            device=action.device, dtype=action.dtype
-        )
+        # action_std = torch.where(
+        #     action_std == 0,
+        #     torch.tensor(1e-8, device=action.device, dtype=action.dtype),
+        #     action_std
+        # )
 
-        action_std = torch.where(
-            action_std == 0,
-            torch.tensor(1e-8, device=action.device, dtype=action.dtype),
-            action_std
-        )
+        # action[..., xyz_dims] = (action[..., xyz_dims] - action_mean) / action_std
 
-        action[..., xyz_dims] = (action[..., xyz_dims] - action_mean) / action_std
+        # # ===== state =====
+        # state_mean = self.stats["observation.state"][key_mean][xyz_dims].to(
+        #     device=state.device, dtype=state.dtype
+        # )
+        # state_std = self.stats["observation.state"][key_std][xyz_dims].to(
+        #     device=state.device, dtype=state.dtype
+        # )
 
-        # ===== state =====
-        state_mean = self.stats["observation.state"][key_mean][xyz_dims].to(
-            device=state.device, dtype=state.dtype
-        )
-        state_std = self.stats["observation.state"][key_std][xyz_dims].to(
-            device=state.device, dtype=state.dtype
-        )
+        # state_std = torch.where(
+        #     state_std == 0,
+        #     torch.tensor(1e-8, device=state.device, dtype=state.dtype),
+        #     state_std
+        # )
 
-        state_std = torch.where(
-            state_std == 0,
-            torch.tensor(1e-8, device=state.device, dtype=state.dtype),
-            state_std
-        )
+        # state[..., xyz_dims] = (state[..., xyz_dims] - state_mean) / state_std
 
-        state[..., xyz_dims] = (state[..., xyz_dims] - state_mean) / state_std
-
-        item["action"] = action
-        item["observation.state"] = state
+        # item["action"] = action
+        # item["observation.state"] = state
         return item
     
     def norm_data_with_min_max_ort6d(self, item):

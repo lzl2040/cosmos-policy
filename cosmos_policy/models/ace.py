@@ -165,6 +165,8 @@ class VisionEncoder(nn.Module):
         device = next(self.parameters()).device
         
         B, C, T, H, W = images.shape
+        # print(f"Images:{images.shape}")
+        images = images.permute(0, 2, 1, 3, 4).contiguous()
         images = images.view(B * T, C, H, W).to(dtype=torch.float32)  # treat time
 
         inputs = self.processor(images=images, return_tensors="pt")

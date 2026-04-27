@@ -123,6 +123,50 @@ OXE_DATASET_CONFIGS = {
         "state_encoding": StateEncoding.POS_QUAT,
         "action_encoding": ActionEncoding.EEF_POS
     },
+    
+    "interna1_single_arm":{
+        "image_obs_keys": {"primary": "head", "secondary": None, "wrist": "hand"},
+        "depth_obs_keys": {"primary": None, "secondary": None, "wrist": None},
+        "state_obs_keys": ["all"],
+        "state_encoding": StateEncoding.POS_QUAT,
+        "action_encoding": ActionEncoding.EEF_POS
+    },
+    "interna1_dual_arm_0":{
+        "image_obs_keys": {"primary": "head", "secondary": "hand_left", "wrist": "hand_right"},
+        "depth_obs_keys": {"primary": None, "secondary": None, "wrist": None},
+        "state_obs_keys": ["all"],
+        "state_encoding": StateEncoding.POS_QUAT,
+        "action_encoding": ActionEncoding.EEF_POS
+    },
+    "interna1_dual_arm_1":{
+        "image_obs_keys": {"primary": "head", "secondary": "hand_left", "wrist": "hand_right"},
+        "depth_obs_keys": {"primary": None, "secondary": None, "wrist": None},
+        "state_obs_keys": ["all"],
+        "state_encoding": StateEncoding.POS_QUAT,
+        "action_encoding": ActionEncoding.EEF_POS
+    },
+    "interna1_dual_arm_2":{
+        "image_obs_keys": {"primary": "head", "secondary": "hand_left", "wrist": "hand_right"},
+        "depth_obs_keys": {"primary": None, "secondary": None, "wrist": None},
+        "state_obs_keys": ["all"],
+        "state_encoding": StateEncoding.POS_QUAT,
+        "action_encoding": ActionEncoding.EEF_POS
+    },
+    "interna1_dual_arm_3":{
+        "image_obs_keys": {"primary": "head", "secondary": "hand_left", "wrist": "hand_right"},
+        "depth_obs_keys": {"primary": None, "secondary": None, "wrist": None},
+        "state_obs_keys": ["all"],
+        "state_encoding": StateEncoding.POS_QUAT,
+        "action_encoding": ActionEncoding.EEF_POS
+    },
+    "interna1_dual_arm_4":{
+        "image_obs_keys": {"primary": "head", "secondary": "hand_left", "wrist": "hand_right"},
+        "depth_obs_keys": {"primary": None, "secondary": None, "wrist": None},
+        "state_obs_keys": ["all"],
+        "state_encoding": StateEncoding.POS_QUAT,
+        "action_encoding": ActionEncoding.EEF_POS
+    },
+    
     "agibot_alpha":{
         "image_obs_keys": {"primary": "top_head", "secondary": "hand_left", "wrist": "hand_right"},
         "depth_obs_keys": {"primary": None, "secondary": None, "wrist": None},
@@ -1017,5 +1061,27 @@ OXE_DATASET_CONFIGS = {
         "state_obs_keys": ["EEF_state", None, "gripper_state"],
         "state_encoding": StateEncoding.POS_EULER,
         "action_encoding": ActionEncoding.EEF_POS,
-    }
+    },
+    
+    "cup_4hz": {
+        "image_obs_keys": {"primary": "right_rgb", "secondary": "top_rgb", "wrist": "wrist_rgb"},
+        "depth_obs_keys": {"primary": None, "secondary": None, "wrist": None},
+        "state_obs_keys": ["EEF_state", None, "gripper_state"],
+        "state_encoding": StateEncoding.POS_EULER,
+        "action_encoding": ActionEncoding.EEF_POS,
+    },
+    "block_full": {
+        "image_obs_keys": {"primary": "right_rgb", "secondary": "top_rgb", "wrist": "wrist_rgb"},
+        "depth_obs_keys": {"primary": None, "secondary": None, "wrist": None},
+        "state_obs_keys": ["EEF_state", None, "gripper_state"],
+        "state_encoding": StateEncoding.POS_EULER,
+        "action_encoding": ActionEncoding.EEF_POS,
+    },
+    "pizza_long": {
+        "image_obs_keys": {"primary": "right_rgb", "secondary": "top_rgb", "wrist": "wrist_rgb"},
+        "depth_obs_keys": {"primary": None, "secondary": None, "wrist": None},
+        "state_obs_keys": ["EEF_state", None, "gripper_state"],
+        "state_encoding": StateEncoding.POS_EULER,
+        "action_encoding": ActionEncoding.EEF_POS,
+    },
 }

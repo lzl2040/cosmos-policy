@@ -247,11 +247,11 @@ class CosmosPolicyDiffusionModel(BaseDiffusionModel):
             nn.SiLU(),
             nn.Linear(256, 128), # 128 = 32 * group_size
         )
-        self.state_decoder = nn.Sequential(
-            nn.Linear(768, 256),
-            nn.SiLU(),
-            nn.Linear(256, 32), # 32 = max_action_dim
-        )
+        # self.state_decoder = nn.Sequential(
+        #     nn.Linear(768, 256),
+        #     nn.SiLU(),
+        #     nn.Linear(256, 32), # 32 = max_action_dim
+        # )
         
         # ace weights
         # ace_pt_path = "/home/cosmos/.cache/cosmos_policy/ace/mp_rank_00_model_states.pt"
@@ -300,6 +300,7 @@ class CosmosPolicyDiffusionModel(BaseDiffusionModel):
             data_batch["t5_text_mask"] = torch.ones(text_embeddings.shape[0], text_embeddings.shape[1], device="cuda")
 
         # Get the input data to noise and denoise~(image, video) and the corresponding conditioner.
+        # there, state will be filled in condition.gt_frames
         _, x0_B_C_T_H_W, condition = self.get_data_and_condition(data_batch)
 
         # Sample pertubation noise levels and N(0, 1) noises
@@ -338,7 +339,7 @@ class CosmosPolicyDiffusionModel(BaseDiffusionModel):
 
         # print(self.loss_reduce)
         # if self.loss_reduce == "mean":
-        #     kendall_loss = kendall_loss.mean() * self.loss_scale
+            # kendall_loss = kendall_loss.mean() * self.loss_scale
         # elif self.loss_reduce == "sum":
         #     kendall_loss = kendall_loss.sum(dim=1).mean() * self.loss_scale
         # else:
@@ -455,10 +456,6 @@ class CosmosPolicyDiffusionModel(BaseDiffusionModel):
                 future_proprio,
                 proprio_indices=future_proprio_indices,
             )
-        # Value
-        # x0_B_C_T_H_W[batch_indices, :, value_indices, :, :] = (
-        #     value_function_return.reshape(-1, 1, 1, 1).expand(-1, C_latent, H_latent, W_latent).to(x0_B_C_T_H_W.dtype)
-        # )
 
         # Get the mean and stand deviation of the marginal probability distribution.
         mean_B_C_T_H_W, std_B_T = self.sde.marginal_prob(x0_B_C_T_H_W, sigma_B_T)
@@ -474,143 +471,16 @@ class CosmosPolicyDiffusionModel(BaseDiffusionModel):
         final_mask_B_T = torch.ones((B, T), dtype=torch.long, device=sigma_B_T.device)  # All 1s mask initially
 
         # If using input masking for value prediction, mask out the loss for everything except the value prediction
-        # This is necessary since otherwise the loss will be computed for all latent frames, not just the value prediction frame
-        if (
-            self.config.mask_current_state_action_for_value_prediction
-            or self.config.mask_future_state_for_qvalue_prediction
-        ):
-            mask_B_T = torch.ones((B, T), dtype=torch.long, device=sigma_B_T.device)  # All 1s mask
-            # Rollout value-function samples (rollout_data_mask == 1 and value_function_sample_mask == 1)
-            value_idx_B = (
-                ((rollout_data_mask == 1) & (value_function_sample_mask == 1)).to(torch.long).to(sigma_B_T.device)
-            )
-            if torch.any(value_idx_B):
-                value_batch_indices = (
-                    torch.nonzero(value_idx_B, as_tuple=False).squeeze(-1).to(torch.long).to(sigma_B_T.device)
-                )
-                # First set the mask to 0 for everything except the value prediction, but only do this for value prediction samples
-                mask_B_T[value_batch_indices, :] = 0
-                # Then set the mask to 1 for the value prediction
-                mask_B_T[value_batch_indices, value_indices[value_batch_indices]] = 1
-            final_mask_B_T = final_mask_B_T * mask_B_T
-
-        # Build per-sample mask to select which frames contribute to loss
-        # - Demo samples: only action prediction
-        # - Rollout world-model samples: only future state (proprio, wrist image, primary image)
-        # - Rollout value-function samples: only value prediction
-        if self.config.mask_loss_for_action_future_state_prediction:
-            B, T = x0_B_C_T_H_W.shape[0], x0_B_C_T_H_W.shape[2]
-            mask_B_T = torch.zeros(
-                (B, T), dtype=torch.long, device=sigma_B_T.device
-            )  # All 0s mask, to be filled with 1s for the relevant timesteps
-            # Demo samples (rollout_data_mask == 0)
-            demo_idx_B = (rollout_data_mask == 0).to(torch.long).to(sigma_B_T.device)
-            if torch.any(demo_idx_B):
-                demo_batch_indices = (
-                    torch.nonzero(demo_idx_B, as_tuple=False).squeeze(-1).to(torch.long).to(sigma_B_T.device)
-                )
-                mask_B_T[demo_batch_indices, action_indices[demo_batch_indices]] = 1
-            # Rollout world-model samples (rollout_data_mask == 1 and world_model_sample_mask == 1)
-            world_idx_B = (rollout_data_mask == 1) & (world_model_sample_mask == 1).to(torch.long).to(sigma_B_T.device)
-            if torch.any(world_idx_B):
-                world_batch_indices = (
-                    torch.nonzero(world_idx_B, as_tuple=False).squeeze(-1).to(torch.long).to(sigma_B_T.device)
-                )
-                if torch.all(future_image_indices != -1):  # -1 indicates future image is not used
-                    mask_B_T[world_batch_indices, future_image_indices[world_batch_indices]] = 1
-                if future_image2_indices is not None and torch.all(
-                    future_image2_indices != -1
-                ):  # -1 indicates secondary image is not used
-                    mask_B_T[world_batch_indices, future_image2_indices[world_batch_indices]] = 1
-                if torch.all(future_wrist_image_indices != -1):  # -1 indicates future wrist image is not used
-                    mask_B_T[world_batch_indices, future_wrist_image_indices[world_batch_indices]] = 1
-                if future_wrist_image2_indices is not None and torch.all(
-                    future_wrist_image2_indices != -1
-                ):  # -1 indicates future wrist image #2 is not used
-                    mask_B_T[world_batch_indices, future_wrist_image2_indices[world_batch_indices]] = 1
-                if torch.all(future_proprio_indices != -1):  # -1 indicates future proprio is not used
-                    mask_B_T[world_batch_indices, future_proprio_indices[world_batch_indices]] = 1
-            # Rollout value-function samples (rollout_data_mask == 1 and value_function_sample_mask == 1)
-            value_idx_B = (
-                ((rollout_data_mask == 1) & (value_function_sample_mask == 1)).to(torch.long).to(sigma_B_T.device)
-            )
-            if torch.any(value_idx_B):
-                value_batch_indices = (
-                    torch.nonzero(value_idx_B, as_tuple=False).squeeze(-1).to(torch.long).to(sigma_B_T.device)
-                )
-                mask_B_T[value_batch_indices, value_indices[value_batch_indices]] = 1
-            final_mask_B_T = final_mask_B_T * mask_B_T
-
-        # Build per-sample mask to select which frames contribute to loss
-        # - Demo samples: only action prediction + future state prediction
-        # - Rollout world-model samples: only future state (proprio, wrist image, primary image)
-        # - Rollout value-function samples: N/A (assert that we don't encounter any value function samples here)
-        if self.config.mask_value_prediction_loss_for_policy_prediction:
-            assert value_function_sample_mask.sum() == 0, (
-                "No value function samples should be present when mask_value_prediction_loss_for_policy_prediction==True!"
-            )
-            B, T = x0_B_C_T_H_W.shape[0], x0_B_C_T_H_W.shape[2]
-            mask_B_T = torch.zeros(
-                (B, T), dtype=torch.long, device=sigma_B_T.device
-            )  # All 0s mask, to be filled with 1s for the relevant timesteps
-            # Demo samples (rollout_data_mask == 0)
-            demo_idx_B = (rollout_data_mask == 0).to(torch.long).to(sigma_B_T.device)
-            if torch.any(demo_idx_B):
-                demo_batch_indices = (
-                    torch.nonzero(demo_idx_B, as_tuple=False).squeeze(-1).to(torch.long).to(sigma_B_T.device)
-                )
-                mask_B_T[demo_batch_indices, action_indices[demo_batch_indices]] = 1
-                if torch.all(future_image_indices != -1):  # -1 indicates future image is not used
-                    mask_B_T[demo_batch_indices, future_image_indices[demo_batch_indices]] = 1
-                if future_image2_indices is not None and torch.all(
-                    future_image2_indices != -1
-                ):  # -1 indicates secondary image is not used
-                    mask_B_T[demo_batch_indices, future_image2_indices[demo_batch_indices]] = 1
-                if torch.all(future_wrist_image_indices != -1):  # -1 indicates future wrist image is not used
-                    mask_B_T[demo_batch_indices, future_wrist_image_indices[demo_batch_indices]] = 1
-                if future_wrist_image2_indices is not None and torch.all(
-                    future_wrist_image2_indices != -1
-                ):  # -1 indicates future wrist image #2 is not used
-                    mask_B_T[demo_batch_indices, future_wrist_image2_indices[demo_batch_indices]] = 1
-                if torch.all(future_proprio_indices != -1):  # -1 indicates future proprio is not used
-                    mask_B_T[demo_batch_indices, future_proprio_indices[demo_batch_indices]] = 1
-            # Rollout world-model samples (rollout_data_mask == 1 and world_model_sample_mask == 1)
-            world_idx_B = (rollout_data_mask == 1) & (world_model_sample_mask == 1).to(torch.long).to(sigma_B_T.device)
-            if torch.any(world_idx_B):
-                world_batch_indices = (
-                    torch.nonzero(world_idx_B, as_tuple=False).squeeze(-1).to(torch.long).to(sigma_B_T.device)
-                )
-                if torch.all(future_image_indices != -1):  # -1 indicates future image is not used
-                    mask_B_T[world_batch_indices, future_image_indices[world_batch_indices]] = 1
-                if future_image2_indices is not None and torch.all(
-                    future_image2_indices != -1
-                ):  # -1 indicates secondary image is not used
-                    mask_B_T[world_batch_indices, future_image2_indices[world_batch_indices]] = 1
-                if torch.all(future_wrist_image_indices != -1):  # -1 indicates future wrist image is not used
-                    mask_B_T[world_batch_indices, future_wrist_image_indices[world_batch_indices]] = 1
-                if future_wrist_image2_indices is not None and torch.all(
-                    future_wrist_image2_indices != -1
-                ):  # -1 indicates future wrist image #2 is not used
-                    mask_B_T[world_batch_indices, future_wrist_image2_indices[world_batch_indices]] = 1
-                if torch.all(future_proprio_indices != -1):  # -1 indicates future proprio is not used
-                    mask_B_T[world_batch_indices, future_proprio_indices[world_batch_indices]] = 1
-            final_mask_B_T = final_mask_B_T * mask_B_T
-
-        # If applicable, upweight the loss on the action predictions by a factor of `action_loss_multiplier`
-        if self.config.action_loss_multiplier != 1:
-            # Only upweight the loss on the action indices
-            final_mask_B_T[batch_indices, action_indices] = final_mask_B_T[batch_indices, action_indices] * int(
-                self.config.action_loss_multiplier
-            )
+        # I delete it: 2026.04.27
 
         # extra loss mask for each sample, for example, human faces, hands
         pred_mse_B_C_T_H_W = (x0_B_C_T_H_W - model_pred.x0) ** 2
-        pred_mse_B_C_T_H_W[:, :, action_indices] = 0.0
+        # pred_mse_B_C_T_H_W[:, :, action_indices] = 0.0
         edm_loss_B_C_T_H_W = pred_mse_B_C_T_H_W * rearrange(weights_per_sigma_B_T, "b t -> b 1 t 1 1")
         
         kendall_loss = edm_loss_B_C_T_H_W
         kendall_loss[:, :, action_indices] = 0.0
-        kendall_loss[:, :, future_proprio_indices] = 0.0
+        # kendall_loss[:, :, future_proprio_indices] = 0.0
         
         kendall_loss_wo_action = kendall_loss.mean()
         
@@ -840,11 +710,15 @@ class CosmosPolicyDiffusionModel(BaseDiffusionModel):
             n_sample = data_batch[input_key].shape[0]
         if state_shape is None:
             _T, _H, _W = data_batch[input_key].shape[-3:]
+            # print(f"Height:{_H} Width:{_W}")
             state_shape = [
                 self.config.state_ch,
-                self.tokenizer.get_latent_num_frames(_T),
-                _H // self.tokenizer.spatial_compression_factor,
-                _W // self.tokenizer.spatial_compression_factor,
+                # self.tokenizer.get_latent_num_frames(_T),
+                # _H // self.tokenizer.spatial_compression_factor,
+                # _W // self.tokenizer.spatial_compression_factor,
+                9,
+                28,
+                28
             ]
 
         if return_orig_clean_latent_frames:
@@ -892,6 +766,7 @@ class CosmosPolicyDiffusionModel(BaseDiffusionModel):
             )
 
         if x_sigma_max is None:
+            # 生成随机噪声
             x_sigma_max = (
                 misc.arch_invariant_rand(
                     (n_sample,) + tuple(state_shape),
@@ -902,6 +777,7 @@ class CosmosPolicyDiffusionModel(BaseDiffusionModel):
                 * self.sde.sigma_max
                 * sigma_max_variance_scale
             )
+            #
 
         if self.net.is_context_parallel_enabled:
             x_sigma_max = broadcast_split_tensor(

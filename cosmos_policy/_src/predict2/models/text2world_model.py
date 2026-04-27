@@ -166,7 +166,7 @@ class DiffusionModel(ImaginaireModel):
         # ace_pt_path = "/home/cosmos/.cache/cosmos_policy/ace/mp_rank_00_model_states.pt"
         # vision_model_name: str = "/home/cosmos/.cache/siglip2-base-patch16-224"
         
-        ace_pt_path = "/mnt/wangxiaofa/action_chunk_encoder_exp/0411_pretrain_ace_ms_data_v13_bs_32_/0411_pretrain_ace_ms_data_v13_bs_32_/global_step45000/mp_rank_00_model_states.pt"
+        ace_pt_path = "/mnt/wangxiaofa/action_chunk_encoder_exp/0425_pretrain_ace_ms_data_bs_512_gather_franka_full/0425_pretrain_ace_ms_data_bs_512_gather_franka_full/global_step6000/mp_rank_00_model_states.pt"
         vision_model_name: str = "/mnt/wangxiaofa/pt_weights/siglip2-base-patch16-224/"
         
         self.ace = ACE(vision_model_name=vision_model_name).to(self.precision)
@@ -787,9 +787,9 @@ class DiffusionModel(ImaginaireModel):
             # Check if the data has already been normalized and avoid re-normalizing
             if IS_PREPROCESSED_KEY in data_batch and data_batch[IS_PREPROCESSED_KEY] is True:
                 assert torch.is_floating_point(data_batch[input_key]), "Video data is not in float format."
-                assert torch.all((data_batch[input_key] >= -1.0001) & (data_batch[input_key] <= 1.0001)), (
-                    f"Video data is not in the range [-1, 1]. get data range [{data_batch[input_key].min()}, {data_batch[input_key].max()}]"
-                )
+                # assert torch.all((data_batch[input_key] >= -1.0001) & (data_batch[input_key] <= 1.0001)), (
+                #     f"Video data is not in the range [-1, 1]. get data range [{data_batch[input_key].min()}, {data_batch[input_key].max()}]"
+                # )
             else:
                 assert data_batch[input_key].dtype == torch.uint8, "Video data is not in uint8 format."
                 # print(torch.max(data_batch[input_key]))

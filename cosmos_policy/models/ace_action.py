@@ -570,5 +570,6 @@ class ActionChunkEncoder(nn.Module):
         # hidden_states = self.output_proj(hidden_states)
 
         # Use sample token output as final embedding
+        hidden_states = hidden_states / (hidden_states.abs().max(dim=-1, keepdim=True)[0] + 1e-8)
         embedding = hidden_states[:, 1:, :]  # (B, output_dim)
         return embedding

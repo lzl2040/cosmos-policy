@@ -134,6 +134,7 @@ class VisionEncoder(nn.Module):
             pooled_dim=self.vae_channels,
             output_dim=output_dim,
         )
+        self.vae_proj = nn.Linear(self.vae_channels, output_dim)
 
     def _infer_patch_grid(self, num_patch_tokens: int) -> Tuple[int, int]:
         """
@@ -197,7 +198,8 @@ class VisionEncoder(nn.Module):
         patch_tokens_2d = patch_tokens_2d.permute(0, 3, 1, 2).contiguous()  # [B, D, H_patch, W_patch]
 
         # bottleneck -> VAE-like feature
-        vae_feature = self.bottleneck(patch_tokens_2d)  # [B, C_out, H_out, W_out]
+        vae_feature_raw = self.bottleneck(patch_tokens_2d)  # [B, C_out, H_out, W_out]
+        vae_feature = vae_feature_raw / (vae_feature_raw.abs().max(dim=-1, keepdim=True)[0] + 1e-8)
 
         # average pool -> token
         pooled_token = F.adaptive_avg_pool2d(vae_feature, output_size=1).flatten(1)  # [B, C_out]
@@ -266,8 +268,8 @@ class ACE(nn.Module):
         self.logit_scale = nn.Parameter(torch.tensor(1.0 / temperature))
         
         # Layer norm for stability
-        self.image_ln = nn.LayerNorm(projection_dim)
-        self.action_ln = nn.LayerNorm(hidden_dim)
+        # self.image_ln = nn.LayerNorm(projection_dim)
+        # self.action_ln = nn.LayerNorm(hidden_dim)
     
     def encode_images(self, images: torch.Tensor) -> torch.Tensor:
         """Encode images to normalized embeddings.
@@ -282,7 +284,7 @@ class ACE(nn.Module):
         image_embeddings = self.image_ln(image_embeddings)
         # print(f"Image embeddings shape after vision model: {image_embeddings.shape}")
         image_embeddings = self.image_projection(image_embeddings)
-        image_embeddings = F.normalize(image_embeddings, dim=-1)
+        # image_embeddings = F.normalize(image_embeddings, dim=-1)
         # print(image_embeddings.shape)
         return image_embeddings
     

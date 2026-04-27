@@ -40,7 +40,7 @@ def encode_t5_text_embeddings(t5_model, t5_tokenizer, prompts, max_length, devic
 text_model_type = "t5"
 torch_dtype = torch.float32
 device = "cuda"
-data_mix = "robomind"
+data_mix = "interna1"
 process_chunk_size = 1
 max_length = 512
 hidden_size = 1024

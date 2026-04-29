@@ -25,6 +25,7 @@ import os
 import traceback
 
 from loguru import logger as logging
+import torch
 from megatron.core import parallel_state
 from torch.utils.data import DataLoader, DistributedSampler
 
@@ -53,7 +54,11 @@ def launch(config: Config, args: argparse.Namespace) -> None:
     trainer = config.trainer.type(config)
     # Setup the miscellaneous stuff for reproducibility.
     log_reproducible_setup(config, args)
-
+    # for b200
+    torch.backends.cuda.enable_cudnn_sdp(True)
+    cudnn_sdp_available = torch.backends.cuda.cudnn_sdp_enabled()
+    print(f"cuDNN SDPA backend: enabled={cudnn_sdp_available}")
+    # _log(f"cuDNN SDPA backend: enabled={cudnn_sdp_available}")
     with model_init():
         model = instantiate(config.model)
 

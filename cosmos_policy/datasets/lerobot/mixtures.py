@@ -386,6 +386,11 @@ OXE_NAMED_MIXTURES: Dict[str, List[Tuple[str, float]]] = {
         # ("interna1_single_arm", 0.05),
     ],
     
+    "interna1_single":[
+        ("interna1_single_arm", 1.0),
+    ],
+    
+    
     "large_dataset":[
         ("fractal20220817_data", 1.0),                          # Google RT-1 Robot Data (Large-Scale)
         # ("kuka", 0.8341046294),

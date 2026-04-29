@@ -78,6 +78,7 @@ done
 # export LD_LIBRARY_PATH=/home/aiscuser/.conda/envs/lerobot/lib:$LD_LIBRARY_PATH
 # PARENT_DIR="/mnt/wangxiaofa/robot_dataset/lerobot-format-v21-ort6d"
 # PARENT_DIR="/mnt/wangxiaofa/robot_dataset/lerobot-format"
+export PATH=/opt/conda/envs/lerobot/bin:$PATH
 ffmpeg
 uv run --no-sync --extra cu128 --group libero --python 3.10 \
     python test_ffmpeg.py
@@ -91,6 +92,7 @@ which ffmpeg
 # TORCH_DISTRIBUTED_DEBUG=DETAIL \
 # NCCL_DEBUG=INFO \
 # NCCL_DEBUG_SUBSYS=COLL \
+
 uv run --no-sync --extra cu128 --group libero --python 3.10 \
   torchrun --nnodes=$NNODES --nproc_per_node=$NPROC_PER_NODE --master_port=$MASTER_PORT \
   -m cosmos_policy.scripts.train \

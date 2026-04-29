@@ -183,6 +183,7 @@ def decode_video_frames_torchcodec(
     #     raw_bytes = f.read()
     
     # Use cached decoder instead of creating new one each time
+    print(str(video_path))
     decoder = decoder_cache.get_decoder(str(video_path))
     # decoder = VideoDecoder(raw_bytes, seek_mode="approximate")
 

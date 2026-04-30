@@ -1568,6 +1568,9 @@ class MultiDatasetforDistTraining(torch.utils.data.Dataset):
             denom == 0, torch.tensor(1e-8), denom
         )
         item["observation.state"] = 2.0 * (item["observation.state"] - state_q01) / denom - 1.0
+        
+        # state_select_
+        
         return item
     
     def __getitem__(self, index):

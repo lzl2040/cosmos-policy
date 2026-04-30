@@ -1367,6 +1367,7 @@ class MultiDatasetforDistTraining(torch.utils.data.Dataset):
         else:
             self.full_dataset = ConcatDataset(self.datasets)
             self.dataset_len = len(self.full_dataset)
+            self.target_size = dataset_len
         
         print(f"Dataset Len:{self.dataset_len}")
         # 4. Aggregate dataset stats from all datasets

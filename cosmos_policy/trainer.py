@@ -90,8 +90,10 @@ class CosmosPolicyTrainer(ImaginaireTrainer):
         ):
             epoch = 0
             while True:
+                # for pretrain
                 dataloader_train.sampler.set_epoch(epoch)
-                dataloader_train.dataset.set_epoch(epoch)
+                # dataloader_train.dataset.set_epoch(epoch)
+                
                 # dataloader_train_iter = iter(dataloader_train)
                 for data_batch in dataloader_train:
                     self.callbacks.on_before_dataloading(iteration)

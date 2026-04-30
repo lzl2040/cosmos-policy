@@ -150,6 +150,12 @@ def decode_frame_torchcodec(
 
 _default_decoder_cache = VideoDecoderCache()
 
+def make_zero_images(T=5, H=224, W=224, C=3):
+    return [
+        Image.fromarray(np.zeros((H, W, C), dtype=np.uint8))
+        for _ in range(T)
+    ]
+
 def decode_video_frames_torchcodec(
     video_path: Path | str,
     timestamps: list[float],
@@ -183,8 +189,13 @@ def decode_video_frames_torchcodec(
     #     raw_bytes = f.read()
     
     # Use cached decoder instead of creating new one each time
-    print(str(video_path))
-    decoder = decoder_cache.get_decoder(str(video_path))
+    # print(str(video_path))
+    try:
+        decoder = decoder_cache.get_decoder(str(video_path))
+    except Exception as e:
+        print(f"decoder load failed: {e} at {video_path}")
+        return make_zero_images()
+    # decoder = decoder_cache.get_decoder(str(video_path))
     # decoder = VideoDecoder(raw_bytes, seek_mode="approximate")
 
     loaded_ts = []

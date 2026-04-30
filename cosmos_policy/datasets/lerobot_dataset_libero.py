@@ -1382,7 +1382,10 @@ class MultiDatasetforDistTraining(torch.utils.data.Dataset):
         self.meta = ds_meta
         
         if self.stage == "finetune":
-            t5_text_embeddings_path = os.path.join("/mnt/wangxiaofa/robot_dataset/lerobot-format-v21-ort6d", f"t5_embeddings_{data_mix}.pkl")
+            #
+            # t5_text_embeddings_path = os.path.join("/mnt/wangxiaofa/robot_dataset/lerobot-format-v21-ort6d", f"t5_embeddings_{data_mix}.pkl")
+            # for real world
+            t5_text_embeddings_path = "/mnt/wangxiaofa/robot_dataset/lerobot-format-v21-ort6d/t5_embeddings_real_world.pkl"
         else:
             t5_text_embeddings_path = os.path.join(parent_dir, f"t5_embeddings_pretrain.pkl")
         if os.path.exists(t5_text_embeddings_path):

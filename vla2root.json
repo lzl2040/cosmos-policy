@@ -79,5 +79,8 @@
     "interna1_dual_arm_2": "InternA1/dual_arm_2",
     "interna1_dual_arm_3": "InternA1/dual_arm_3",
     "interna1_dual_arm_4": "InternA1/dual_arm_4",
-    "interna1_single_arm": "InternA1/single_arm"
+    "interna1_single_arm": "InternA1/single_arm",
+    "pizza_long": "pizza_sub_4_hz_4_unified_space",
+    "block_full": "block_hz_4",
+    "sauce_full": "sauce_hz_4"
 }

@@ -1323,7 +1323,8 @@ class MultiDatasetforDistTraining(torch.utils.data.Dataset):
                         delta_timestamps=delta_timestamps,
                         image_transforms=image_transforms,
                         wrist_image_transforms=None,
-                        video_backend="torchcodec",
+                        # video_backend="torchcodec",
+                        video_backend = "pyav",
                         dataset_name=dataset_name,
                     )
                     self.num_episodes += dataset.num_episodes

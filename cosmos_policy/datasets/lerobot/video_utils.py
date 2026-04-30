@@ -116,7 +116,7 @@ def decode_video_frames(
     if backend == "torchcodec":
         return decode_video_frames_torchcodec(video_path, timestamps, tolerance_s, return_type=return_type, worker_count=worker_count)
     elif backend in ["pyav", "video_reader"]:
-        return decode_video_frames_torchvision(video_path, timestamps, tolerance_s, backend)
+        return decode_video_frames_torchvision(video_path, timestamps, tolerance_s, backend, return_type=return_type)
     else:
         raise ValueError(f"Unsupported video backend: {backend}")
 
@@ -396,7 +396,7 @@ def decode_video_frames_torchvision(
     tolerance_s: float,
     backend: str = "pyav",
     log_loaded_timestamps: bool = False,
-    return_all: bool = False,
+    return_all: bool = True,
     return_type: str = "tensor",
     max_frame_window: int = -1
 ) -> torch.Tensor:
@@ -475,41 +475,6 @@ def decode_video_frames_torchvision(
                 # print(current_ts, first_ts, len(loaded_frames))
         except Exception as e:
             print(f"Frame decode error: {e} from {video_path} using fallback ones tensor.")
-        
-        # reader_iter = iter(reader)
-
-        # for _ in range(max_frame_window):
-        #     try:
-        #         frame = next(reader_iter)   # 关键：显式 next 才能捕获异常
-        #         current_ts = frame['pts']
-        #         tensor = frame["data"]  # (C,H,W)
-
-        #         if log_loaded_timestamps:
-        #             logging.info(f"frame loaded at timestamp={current_ts:.4f}")
-
-        #         loaded_frames.append(frame["data"])
-        #         loaded_ts.append(current_ts)
-
-        #     except StopIteration:
-        #         # 视频已读完，直接退出，不补帧
-        #         logging.info("Video finished early. Stop reading.")
-        #         break
-
-        #     except Exception as e:
-        #         # 解码错误时：补一个全 1 tensor
-        #         logging.warning(f"Frame decode error: {e} from {video_path} using fallback ones tensor.")
-        #         print(f"Frame decode error: {e} from {video_path} using fallback ones tensor.")
-        #         if len(loaded_frames) > 0:
-        #             ones_frame = torch.ones_like(loaded_frames[0])
-        #         else:
-        #             # 如果第一帧就坏，必须给定 frame_shape
-        #             meta = reader.get_metadata()
-        #             w = meta["video"]["width"]
-        #             h = meta["video"]["height"]
-        #             ones_frame = torch.ones((3, h, w), dtype=torch.uint8)
-
-        #         loaded_frames.append(ones_frame)
-        #         loaded_ts.append(-1)
 
     if backend == "pyav":
         reader.container.close()
@@ -573,6 +538,7 @@ def decode_video_frames_torchvision(
             return closest_frames
         elif return_type == "image":
             image_list = []
+            # print(loaded_frames.shape)
             for idx in range(len(loaded_frames)):
                 img = Image.fromarray(loaded_frames[idx].numpy().astype(np.uint8).transpose(1, 2, 0))
                 image_list.append(img)

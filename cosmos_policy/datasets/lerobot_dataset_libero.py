@@ -1603,7 +1603,9 @@ class MultiDatasetforDistTraining(torch.utils.data.Dataset):
             # print(task_embeddings.shape)
             # task_embeddings = torch.squeeze(torch.zeros((1, 512, 1024)))
         else:
-            task_embeddings = torch.squeeze(self.t5_text_embeddings[item["task"]])
+            # task_embeddings = torch.squeeze(self.t5_text_embeddings[item["task"]])
+            task_embeddings = torch.from_numpy(np.load(f)).squeeze()
+            # task_embeddings = torch.squeeze(task_embeddings)
         
         # prepare state and action
         item = self.prepare_action_state(item)

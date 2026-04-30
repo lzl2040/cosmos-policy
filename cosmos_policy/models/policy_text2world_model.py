@@ -38,6 +38,7 @@ from cosmos_policy._src.predict2.models.text2world_model import (
 from cosmos_policy._src.predict2.models.text2world_model import (
     Text2WorldModelConfig as BaseText2WorldModelConfig,
 )
+from cosmos_policy._src.imaginaire.utils.denoise_prediction import DenoisePrediction
 from cosmos_policy.conditioner import Text2WorldCondition
 from cosmos_policy.modules.cosmos_sampler import CosmosPolicySampler
 from cosmos_policy.modules.hybrid_edm_sde import HybridEDMSDE
@@ -253,26 +254,78 @@ class CosmosPolicyDiffusionModel(BaseDiffusionModel):
         #     nn.Linear(256, 32), # 32 = max_action_dim
         # )
         
-        # ace weights
-        # ace_pt_path = "/home/cosmos/.cache/cosmos_policy/ace/mp_rank_00_model_states.pt"
-        # vision_model_name: str = "/home/cosmos/.cache/siglip2-base-patch16-224"
+        # ACE model for action encoding
+        # NOTE: You need to set the correct vision_model_name path
+        # vision_model_name: str = "/mnt/wangxiaofa/pt_weights/siglip2-base-patch16-224"
         
         # self.ace = ACE(vision_model_name=vision_model_name).to(self.precision)
         
         self.action_group_size = 4
-        # vision_model_name: str = "/mnt/wangxiaofa/pt_weights/siglip2-base-patch16-224"
-        # self.tokenizer = VisionEncoder(model_name=vision_model_name)
+
+    def denoise(
+        self,
+        xt_B_C_T_H_W: torch.Tensor,
+        sigma: torch.Tensor,
+        condition: Text2WorldCondition,
+        action_latent: Optional[torch.Tensor] = None,
+        num_action_tokens: int = 4,
+    ) -> Tuple[DenoisePrediction, Optional[torch.Tensor]]:
+        """
+        Performs denoising on the input noise data, noise level, and condition.
         
-        # # action encoder, also for state information
-        # ace_config = ACEConfig(action_dim = 7,
-        #                        max_action_dim = 32,
-        #                        chunk_size=16,
-        #                        group_size=4,
-        #                        hidden_dim=768,
-        #                        num_attention_heads=12,
-        #                        num_hidden_layers=12
-        #                        )
-        # self.ace_action = ActionChunkEncoder(ace_config).to(self.precision)
+        Extended to support action latent concatenation.
+
+        Args:
+            xt_B_C_T_H_W (torch.Tensor): The input noise data.
+            sigma (torch.Tensor): The noise level.
+            condition (Text2WorldCondition): conditional information, generated from self.conditioner
+            action_latent (Optional[torch.Tensor]): Optional action latent tensor [B, num_action_tokens, hidden_dim].
+                If provided, will be concatenated with image tokens in the denoising network.
+            num_action_tokens (int): Number of action tokens. Default: 4.
+
+        Returns:
+            Tuple[DenoisePrediction, Optional[torch.Tensor]]: 
+                - DenoisePrediction: The denoised prediction, includes clean data prediction (x0), noise prediction (eps_pred).
+                - action_output: Optional action output tensor [B, num_action_tokens, hidden_dim] from the network.
+        """
+        if sigma.ndim == 1:
+            sigma_B_T = rearrange(sigma, "b -> b 1")
+        elif sigma.ndim == 2:
+            sigma_B_T = sigma
+        else:
+            raise ValueError(f"sigma shape {sigma.shape} is not supported")
+        sigma_B_1_T_1_1 = rearrange(sigma_B_T, "b t -> b 1 t 1 1")
+        # get precondition for the network
+        c_skip_B_1_T_1_1, c_out_B_1_T_1_1, c_in_B_1_T_1_1, c_noise_B_1_T_1_1 = self.scaling(sigma=sigma_B_1_T_1_1)
+
+        # forward pass through the network with optional action latent
+        net_output = self.net(
+            x_B_C_T_H_W=(xt_B_C_T_H_W * c_in_B_1_T_1_1).to(
+                **self.tensor_kwargs
+            ),  # Eq. 7 of https://arxiv.org/pdf/2206.00364.pdf
+            timesteps_B_T=c_noise_B_1_T_1_1.squeeze(dim=[1, 3, 4]).to(
+                **self.tensor_kwargs
+            ),  # Eq. 7 of https://arxiv.org/pdf/2206.00364.pdf
+            **condition.to_dict(),
+            action_latent=action_latent,
+            num_action_tokens=num_action_tokens,
+        )
+        
+        # Handle different return types from network
+        action_output = None
+        if isinstance(net_output, tuple):
+            # Network returns (image_output, intermediate_features, action_output)
+            net_output_B_C_T_H_W = net_output[0].float()
+            action_output = net_output[2] if len(net_output) > 2 else None
+        else:
+            net_output_B_C_T_H_W = net_output.float()
+
+        x0_pred_B_C_T_H_W = c_skip_B_1_T_1_1 * xt_B_C_T_H_W + c_out_B_1_T_1_1 * net_output_B_C_T_H_W
+
+        # get noise prediction based on sde
+        eps_pred_B_C_T_H_W = (xt_B_C_T_H_W - x0_pred_B_C_T_H_W) / sigma_B_1_T_1_1
+
+        return DenoisePrediction(x0_pred_B_C_T_H_W, eps_pred_B_C_T_H_W, None), action_output
 
     def training_step(
         self, data_batch: dict[str, torch.Tensor], iteration: int
@@ -411,58 +464,46 @@ class CosmosPolicyDiffusionModel(BaseDiffusionModel):
         # NOTE (user): Action chunk, proprio, value injection
         # x0_B_C_T_H_W: (B, C', T', H', W')
         # x0_B_C_T_H_W is the VAE-encoded latent representing several input images (which may be in a different order than below):
-        # - conditional frames (e.g., proprio, wrist camera image, primary image, optional history)
-        # - future image(s) and proprio state to predict
-        # - action chunk to predict (blank image)
-        # - value function return (rewards-to-go) to predict (blank image)
+        # - conditional frames (e.g., wrist camera image, primary image, optional history)
+        # - future image(s) to predict
+        # NOTE: Action is now handled separately as action latent, NOT injected into image latent
+        # NOTE: Proprio is removed - not used as input or prediction target
         condition.orig_x0_B_C_T_H_W = x0_B_C_T_H_W.clone()  # Keep a backup of the original gt_frames
         batch_indices = torch.arange(x0_B_C_T_H_W.shape[0], device=x0_B_C_T_H_W.device)
         C_latent, H_latent, W_latent = x0_B_C_T_H_W.shape[1], x0_B_C_T_H_W.shape[3], x0_B_C_T_H_W.shape[4]
         
-        # prepare embed action and states
-        # add noise to action chunk
-        # action_sigma_B, epsilon_B_N_C = self.draw_training_sigma_and_epsilon(action_chunk.size(), condition)
+        # Prepare action embeddings (encode action chunk)
+        # action_chunk: [B, chunk_size, action_dim]
         with torch.no_grad():
-            action_embeddings = self.ace.action_encoder(action_chunk, sample_rate)  # 8 4 768, [B, chunk_size, action_dim] -> [B, chunk_size // group_size, hidden_dim]
+            action_embeddings = self.ace.action_encoder(action_chunk, sample_rate)  # [B, chunk_size // group_size, hidden_dim]
         
-        # proprio_temp = proprio.unsqueeze(1).expand(-1, action_chunk.shape[1], -1)  # [B, 1, proprio_dim] to be repeated in the latent volume
-        # future_proprio_temp = future_proprio.unsqueeze(1).expand(-1, action_chunk.shape[1], -1)  # [B, chunk_size, proprio_dim] to be repeated in the latent volume
-        # with torch.no_grad():
-        #     state_embeddings = self.ace.action_encoder(proprio_temp.contiguous(), sample_rate)  # 8 4 768
-        #     state_embeddings = state_embeddings.mean(dim=1, keepdim=False)  # B hidden_dim
-        #     future_state_embeddings = self.ace.action_encoder(future_proprio_temp.contiguous(), sample_rate)  # 8 4 768, [B, proprio_dim] -> [B, 1, hidden_dim]
-        #     future_state_embeddings = future_state_embeddings.mean(dim=1, keepdim=False)
-        
-        # Action
-        x0_B_C_T_H_W = replace_latent_with_action_chunk(
-            x0_B_C_T_H_W,
-            action_embeddings,
-            # action_chunk,
-            action_indices=action_indices,
+        # Add noise to action embeddings (noise is added after encoding)
+        # Draw noise for action embeddings
+        action_sigma_B, action_epsilon_B_N_D = self.draw_training_sigma_and_epsilon(
+            action_embeddings.size(), condition
         )
-        # Proprio
-        if torch.all(current_proprio_indices != -1):  # -1 indicates proprio is not used
-            x0_B_C_T_H_W = replace_latent_with_proprio(
-                x0_B_C_T_H_W,
-                # state_embeddings,
-                proprio,
-                proprio_indices=current_proprio_indices,
-            )
-        # Future proprio
-        if torch.all(future_proprio_indices != -1):  # -1 indicates future proprio is not used
-            x0_B_C_T_H_W = replace_latent_with_proprio(
-                x0_B_C_T_H_W,
-                # future_state_embeddings,
-                future_proprio,
-                proprio_indices=future_proprio_indices,
-            )
+        # Noisify action embeddings
+        action_mean_B_N_D, action_std_B_N = self.sde.marginal_prob(action_embeddings, action_sigma_B)
+        noisy_action_embeddings = action_mean_B_N_D + action_epsilon_B_N_D * rearrange(action_std_B_N, "b n -> b n 1")
+        
+        # Get the number of action tokens
+        num_action_tokens = action_embeddings.shape[1]  # chunk_size // group_size
+        
+        # NOTE: No longer injecting action/proprio into image latent
+        # Action will be concatenated as separate tokens in the denoising network
 
         # Get the mean and stand deviation of the marginal probability distribution.
         mean_B_C_T_H_W, std_B_T = self.sde.marginal_prob(x0_B_C_T_H_W, sigma_B_T)
         # Generate noisy observations
         xt_B_C_T_H_W = mean_B_C_T_H_W + epsilon_B_C_T_H_W * rearrange(std_B_T, "b t -> b 1 t 1 1")
-        # make prediction
-        model_pred = self.denoise(xt_B_C_T_H_W, sigma_B_T, condition)
+        # make prediction - pass action latent to denoise network
+        model_pred, action_output = self.denoise(
+            xt_B_C_T_H_W, 
+            sigma_B_T, 
+            condition,
+            action_latent=noisy_action_embeddings,
+            num_action_tokens=num_action_tokens,
+        )
         # loss weights for different noise levels
         weights_per_sigma_B_T = self.get_per_sigma_loss_weights(sigma=sigma_B_T)
 
@@ -479,19 +520,28 @@ class CosmosPolicyDiffusionModel(BaseDiffusionModel):
         edm_loss_B_C_T_H_W = pred_mse_B_C_T_H_W * rearrange(weights_per_sigma_B_T, "b t -> b 1 t 1 1")
         
         kendall_loss = edm_loss_B_C_T_H_W
-        kendall_loss[:, :, action_indices] = 0.0
+        # kendall_loss[:, :, action_indices] = 0.0
         # kendall_loss[:, :, future_proprio_indices] = 0.0
         
         kendall_loss_wo_action = kendall_loss.mean()
         
-        # for action decoding
-        action_shape = action_embeddings.shape[1:]
-        pred_action_embeds = extract_action_chunk_from_latent_sequence(model_pred.x0, action_shape, action_indices)
-        pred_action = self.action_decoder(pred_action_embeds)  # [B, chunk_size // group_size, action_dim]
-        pred_action = pred_action.view(pred_action.shape[0], pred_action.shape[1], self.action_group_size, -1) 
-        pred_action = pred_action.view(pred_action.shape[0], -1, pred_action.shape[-1])  # [B, chunk_size, action_dim]
-        kendall_loss_action_mse_loss = ((pred_action - action_chunk) ** 2).mean()
-        kendall_loss_action_l1_loss = torch.abs(pred_action - action_chunk).mean()
+        # for action decoding - use action_output from network instead of extracting from image latent
+        # action_output: [B, num_action_tokens, hidden_dim] -> decode to action space
+        if action_output is not None:
+            pred_action = self.action_decoder(action_output)  # [B, num_action_tokens, action_dim * group_size]
+            pred_action = pred_action.view(pred_action.shape[0], pred_action.shape[1], self.action_group_size, -1) 
+            pred_action = pred_action.view(pred_action.shape[0], -1, pred_action.shape[-1])  # [B, chunk_size, action_dim]
+            kendall_loss_action_mse_loss = ((pred_action - action_chunk) ** 2).mean()
+            kendall_loss_action_l1_loss = torch.abs(pred_action - action_chunk).mean()
+        else:
+            # Fallback: extract from image latent (old behavior)
+            action_shape = action_embeddings.shape[1:]
+            pred_action_embeds = extract_action_chunk_from_latent_sequence(model_pred.x0, action_shape, action_indices)
+            pred_action = self.action_decoder(pred_action_embeds)  # [B, chunk_size // group_size, action_dim]
+            pred_action = pred_action.view(pred_action.shape[0], pred_action.shape[1], self.action_group_size, -1) 
+            pred_action = pred_action.view(pred_action.shape[0], -1, pred_action.shape[-1])  # [B, chunk_size, action_dim]
+            kendall_loss_action_mse_loss = ((pred_action - action_chunk) ** 2).mean()
+            kendall_loss_action_l1_loss = torch.abs(pred_action - action_chunk).mean()
         
         # for state decoding
         # state_shape = (1, state_embeddings.shape[1])

@@ -536,7 +536,11 @@ class Attention(nn.Module):
                     k = k.to(original_dtype)
             return q, k, v
 
+        # print("Pre", q.device, k.device, v.device)
         q, k, v = apply_norm_and_rotary_pos_emb(q, k, v, rope_emb)
+        q = q.to(v.device)
+        k = k.to(v.device)
+        # print(q.device, k.device, v.device)
 
         return q, k, v
 
@@ -1143,6 +1147,7 @@ class Block(nn.Module):
         use_wan_fp32_strategy (bool): Whether to use Wan's FP32 strategy. Default: False
         If True, in Attention layer, if do self-attention, q and k will be forced to fp32 before rotary pos emb
         also, in modulation computation, force entire computation in fp32
+        action_dim (int, optional): Dimension of action latent. If provided, action tokens will be concatenated with image tokens.
 
     The block applies the following sequence:
     1. Self-attention with AdaLN modulation
@@ -1163,6 +1168,7 @@ class Block(nn.Module):
         backend: str = "transformer_engine",
         image_context_dim: Optional[int] = None,
         use_wan_fp32_strategy: bool = False,
+        action_dim: Optional[int] = None,
     ):
         super().__init__()
         self.x_dim = x_dim
@@ -1417,6 +1423,7 @@ class MiniTrainDIT(WeightTrainingStat):
         extra_h_extrapolation_ratio (float): Height extrapolation ratio for extra embeddings.
         extra_w_extrapolation_ratio (float): Width extrapolation ratio for extra embeddings.
         extra_t_extrapolation_ratio (float): Temporal extrapolation ratio for extra embeddings.
+        action_dim (int, optional): Dimension of action latent. If provided, action tokens will be concatenated with image tokens.
         n_dense_blocks (`int`, *optional*, defaults to -1):
             Number of blocks that will remain dense (not replaced with sparse attention)
             If -1, no blocks are replaced with sparse attention
@@ -1486,6 +1493,8 @@ class MiniTrainDIT(WeightTrainingStat):
         natten_parameters: Union[dict, list] = None,
         # if True, will closely match wan's strategy to use fp32 in certain layers/operations
         use_wan_fp32_strategy: bool = False,
+        # action latent settings
+        action_dim: Optional[int] = None,
     ) -> None:
         super().__init__()
         self.max_img_h = max_img_h
@@ -1577,6 +1586,14 @@ class MiniTrainDIT(WeightTrainingStat):
             self = replace_selfattn_op_with_sparse_attn_op(self, n_dense_blocks, natten_parameters=natten_parameters)
 
         self._is_context_parallel_enabled = False
+        
+        # Action latent settings
+        self.action_dim = action_dim
+        if action_dim is not None:
+            # Action projection layer: project action latent to same dim as image latent
+            self.action_proj = nn.Linear(action_dim, model_channels, bias=False)
+            # Action position embedding (learnable)
+            self.action_pos_embed = nn.Parameter(torch.zeros(1, model_channels))  # for action tokens
 
     def init_weights(self):
         self.x_embedder.init_weights()
@@ -1687,6 +1704,7 @@ class MiniTrainDIT(WeightTrainingStat):
             x_B_C_T_H_W = torch.cat(
                 [x_B_C_T_H_W, padding_mask.unsqueeze(1).repeat(1, 1, x_B_C_T_H_W.shape[2], 1, 1)], dim=1
             )
+        # print(x_B_C_T_H_W.shape)
         x_B_T_H_W_D = self.x_embedder(x_B_C_T_H_W)
 
         if self.extra_per_block_abs_pos_emb:
@@ -1720,16 +1738,22 @@ class MiniTrainDIT(WeightTrainingStat):
         data_type: Optional[DataType] = DataType.VIDEO,
         intermediate_feature_ids: Optional[List[int]] = None,
         img_context_emb: Optional[torch.Tensor] = None,
+        action_latent: Optional[torch.Tensor] = None,
+        num_action_tokens: int = 4,
     ) -> torch.Tensor | List[torch.Tensor] | Tuple[torch.Tensor, List[torch.Tensor]]:
         """
         Args:
             x: (B, C, T, H, W) tensor of spatial-temp inputs
             timesteps: (B, ) tensor of timesteps
             crossattn_emb: (B, N, D) tensor of cross-attention embeddings
+            action_latent: (B, num_action_tokens, action_dim) tensor of action latent (already noised)
+            num_action_tokens: number of action tokens
         """
         assert isinstance(data_type, DataType), (
             f"Expected DataType, got {type(data_type)}. We need discuss this flag later."
         )
+        # print(x_B_C_T_H_W.shape)
+        # rope_emb_L_1_1_D is None
         x_B_T_H_W_D, rope_emb_L_1_1_D, extra_pos_emb_B_T_H_W_D_or_T_H_W_B_D = self.prepare_embedded_sequence(
             x_B_C_T_H_W,
             fps=fps,
@@ -1752,7 +1776,10 @@ class MiniTrainDIT(WeightTrainingStat):
             if timesteps_B_T.ndim == 1:
                 timesteps_B_T = timesteps_B_T.unsqueeze(1)
             t_embedding_B_T_D, adaln_lora_B_T_3D = self.t_embedder(timesteps_B_T)
+            # print(f"Device 1:{t_embedding_B_T_D.device}, {timesteps_B_T.device}")
             t_embedding_B_T_D = self.t_embedding_norm(t_embedding_B_T_D)
+            t_embedding_B_T_D = t_embedding_B_T_D.to(timesteps_B_T.device)
+            # print(f"Device:{t_embedding_B_T_D.device}, {timesteps_B_T.device}")
 
         # for logging purpose
         affline_scale_log_info = {}
@@ -1767,10 +1794,177 @@ class MiniTrainDIT(WeightTrainingStat):
             )
 
         B, T, H, W, D = x_B_T_H_W_D.shape
+        
+        # Handle action latent concatenation if provided
+        if action_latent is not None and self.action_dim is not None:
+            # Project action latent to model dimension
+            # action_latent: (B, num_action_tokens, action_dim)
+            action_B_N_D = self.action_proj(action_latent)  # (B, num_action_tokens, model_channels)
+            # Add position embedding for action tokens
+            action_B_N_D = action_B_N_D + self.action_pos_embed  # broadcast position embed
+            
+            # Reshape image latent for concatenation
+            x_B_THW_D = rearrange(x_B_T_H_W_D, "b t h w d -> b (t h w) d")  # (B, T*H*W, D)
+            
+            # Concatenate action tokens after image tokens
+            x_B_THWplusA_D = torch.cat([x_B_THW_D, action_B_N_D], dim=1)  # (B, T*H*W + num_action_tokens, D)
+            
+            # For now, we need to process with concatenated sequence
+            # We'll handle this by reshaping back after processing
+            # The attention will see both image and action tokens
+            num_img_tokens = T * H * W
+            
+            # Process through blocks with concatenated sequence
+            intermediate_features_outputs = []
+            for i, block in enumerate(self.blocks):
+                # Reshape to 5D format expected by block (with extended T dimension)
+                # We use T=1 with larger spatial dimension to handle the concatenated sequence
+                total_seq_len = x_B_THWplusA_D.shape[1]
+                
+                # Process in 1D sequence format for self-attention
+                # Skip the standard block processing and do custom processing
+                if extra_pos_emb_B_T_H_W_D_or_T_H_W_B_D is not None:
+                    extra_pos_emb_flat = rearrange(extra_pos_emb_B_T_H_W_D_or_T_H_W_B_D, "b t h w d -> b (t h w) d")
+                    # Pad extra_pos_emb for action tokens
+                    extra_pos_emb_padded = torch.cat([
+                        extra_pos_emb_flat, 
+                        torch.zeros(B, num_action_tokens, D, device=extra_pos_emb_flat.device, dtype=extra_pos_emb_flat.dtype)
+                    ], dim=1)
+                    x_B_THWplusA_D = x_B_THWplusA_D + extra_pos_emb_padded
+
+                # Self-attention with concatenated sequence
+                with amp.autocast("cuda", enabled=self.use_wan_fp32_strategy, dtype=torch.float32):
+                    if block.use_adaln_lora:
+                        shift_self_attn_B_T_D, scale_self_attn_B_T_D, gate_self_attn_B_T_D = (
+                            block.adaln_modulation_self_attn(t_embedding_B_T_D) + adaln_lora_B_T_3D
+                        ).chunk(3, dim=-1)
+                        shift_cross_attn_B_T_D, scale_cross_attn_B_T_D, gate_cross_attn_B_T_D = (
+                            block.adaln_modulation_cross_attn(t_embedding_B_T_D) + adaln_lora_B_T_3D
+                        ).chunk(3, dim=-1)
+                        shift_mlp_B_T_D, scale_mlp_B_T_D, gate_mlp_B_T_D = (
+                            block.adaln_modulation_mlp(t_embedding_B_T_D) + adaln_lora_B_T_3D
+                        ).chunk(3, dim=-1)
+                    else:
+                        shift_self_attn_B_T_D, scale_self_attn_B_T_D, gate_self_attn_B_T_D = block.adaln_modulation_self_attn(
+                            t_embedding_B_T_D
+                        ).chunk(3, dim=-1)
+                        shift_cross_attn_B_T_D, scale_cross_attn_B_T_D, gate_cross_attn_B_T_D = (
+                            block.adaln_modulation_cross_attn(t_embedding_B_T_D).chunk(3, dim=-1)
+                        )
+                        shift_mlp_B_T_D, scale_mlp_B_T_D, gate_mlp_B_T_D = block.adaln_modulation_mlp(t_embedding_B_T_D).chunk(3, dim=-1)
+
+                # Expand modulation for all tokens (image + action)
+                # t_embedding is per-frame, need to expand for all spatial positions
+                shift_self_attn_expanded = repeat(shift_self_attn_B_T_D, "b t d -> b (t h w n) d", h=H, w=W, n=1)
+                # Add modulation for action tokens (use same modulation as last frame)
+                shift_self_attn_action = repeat(shift_self_attn_B_T_D[:, -1:, :], "b 1 d -> b n d", n=num_action_tokens)
+                shift_self_attn_full = torch.cat([shift_self_attn_expanded, shift_self_attn_action], dim=1)
+                
+                scale_self_attn_expanded = repeat(scale_self_attn_B_T_D, "b t d -> b (t h w n) d", h=H, w=W, n=1)
+                scale_self_attn_action = repeat(scale_self_attn_B_T_D[:, -1:, :], "b 1 d -> b n d", n=num_action_tokens)
+                scale_self_attn_full = torch.cat([scale_self_attn_expanded, scale_self_attn_action], dim=1)
+                
+                gate_self_attn_expanded = repeat(gate_self_attn_B_T_D, "b t d -> b (t h w n) d", h=H, w=W, n=1)
+                gate_self_attn_action = repeat(gate_self_attn_B_T_D[:, -1:, :], "b 1 d -> b n d", n=num_action_tokens)
+                gate_self_attn_full = torch.cat([gate_self_attn_expanded, gate_self_attn_action], dim=1)
+                
+                # Similar for cross-attention and MLP
+                shift_cross_attn_expanded = repeat(shift_cross_attn_B_T_D, "b t d -> b (t h w n) d", h=H, w=W, n=1)
+                shift_cross_attn_action = repeat(shift_cross_attn_B_T_D[:, -1:, :], "b 1 d -> b n d", n=num_action_tokens)
+                shift_cross_attn_full = torch.cat([shift_cross_attn_expanded, shift_cross_attn_action], dim=1)
+                
+                scale_cross_attn_expanded = repeat(scale_cross_attn_B_T_D, "b t d -> b (t h w n) d", h=H, w=W, n=1)
+                scale_cross_attn_action = repeat(scale_cross_attn_B_T_D[:, -1:, :], "b 1 d -> b n d", n=num_action_tokens)
+                scale_cross_attn_full = torch.cat([scale_cross_attn_expanded, scale_cross_attn_action], dim=1)
+                
+                gate_cross_attn_expanded = repeat(gate_cross_attn_B_T_D, "b t d -> b (t h w n) d", h=H, w=W, n=1)
+                gate_cross_attn_action = repeat(gate_cross_attn_B_T_D[:, -1:, :], "b 1 d -> b n d", n=num_action_tokens)
+                gate_cross_attn_full = torch.cat([gate_cross_attn_expanded, gate_cross_attn_action], dim=1)
+                
+                shift_mlp_expanded = repeat(shift_mlp_B_T_D, "b t d -> b (t h w n) d", h=H, w=W, n=1)
+                shift_mlp_action = repeat(shift_mlp_B_T_D[:, -1:, :], "b 1 d -> b n d", n=num_action_tokens)
+                shift_mlp_full = torch.cat([shift_mlp_expanded, shift_mlp_action], dim=1)
+                
+                scale_mlp_expanded = repeat(scale_mlp_B_T_D, "b t d -> b (t h w n) d", h=H, w=W, n=1)
+                scale_mlp_action = repeat(scale_mlp_B_T_D[:, -1:, :], "b 1 d -> b n d", n=num_action_tokens)
+                scale_mlp_full = torch.cat([scale_mlp_expanded, scale_mlp_action], dim=1)
+                
+                gate_mlp_expanded = repeat(gate_mlp_B_T_D, "b t d -> b (t h w n) d", h=H, w=W, n=1)
+                gate_mlp_action = repeat(gate_mlp_B_T_D[:, -1:, :], "b 1 d -> b n d", n=num_action_tokens)
+                gate_mlp_full = torch.cat([gate_mlp_expanded, gate_mlp_action], dim=1)
+                
+                # Self-attention
+                normalized_x = block.layer_norm_self_attn(x_B_THWplusA_D) * (1 + scale_self_attn_full) + shift_self_attn_full
+                # For self-attention with action tokens, we use full attention (no RoPE for action tokens)
+                # Split into image and action parts for attention
+                normalized_img = normalized_x[:, :num_img_tokens]
+                normalized_action = normalized_x[:, num_img_tokens:]
+                
+                # Process image tokens with RoPE
+                video_size = VideoSize(T=T, H=H, W=W)
+                if block.cp_size is not None and block.cp_size > 1:
+                    video_size = VideoSize(T=T * block.cp_size, H=H, W=W)
+                
+                # result_img = block.self_attn(
+                #     normalized_img,
+                #     None,
+                #     rope_emb=rope_emb_L_1_1_D,
+                #     video_size=video_size,
+                # )
+                
+                # Process action tokens (no RoPE) - attend to all tokens including images
+                # Concatenate for full self-attention
+                result_full = block.self_attn(
+                    normalized_x,
+                    None,
+                    rope_emb=None,  # No RoPE for mixed tokens
+                )
+                result_img = result_full[:, :num_img_tokens]
+                result_action = result_full[:, num_img_tokens:]
+                
+                x_B_THWplusA_D = x_B_THWplusA_D + gate_self_attn_full * result_full
+                
+                # Cross-attention (only for image tokens, action tokens can also attend)
+                normalized_x = block.layer_norm_cross_attn(x_B_THWplusA_D) * (1 + scale_cross_attn_full) + shift_cross_attn_full
+                result_full = block.cross_attn(normalized_x, context_input, rope_emb=None)
+                x_B_THWplusA_D = result_full * gate_cross_attn_full + x_B_THWplusA_D
+                
+                # MLP
+                normalized_x = block.layer_norm_mlp(x_B_THWplusA_D) * (1 + scale_mlp_full) + shift_mlp_full
+                result_full = block.mlp(normalized_x)
+                x_B_THWplusA_D = x_B_THWplusA_D + gate_mlp_full * result_full
+                
+                if intermediate_feature_ids and i in intermediate_feature_ids:
+                    intermediate_features_outputs.append(x_B_THWplusA_D)
+            
+            # Split back into image and action parts
+            x_B_THW_D = x_B_THWplusA_D[:, :num_img_tokens]
+            action_output = x_B_THWplusA_D[:, num_img_tokens:]
+            
+            # Reshape back to 5D for image output
+            x_B_T_H_W_D = rearrange(x_B_THW_D, "b (t h w) d -> b t h w d", t=T, h=H, w=W)
+            
+            # Final layer only processes image tokens
+            x_B_T_H_W_O = self.final_layer(x_B_T_H_W_D, t_embedding_B_T_D, adaln_lora_B_T_3D=adaln_lora_B_T_3D)
+            x_B_C_Tt_Hp_Wp = self.unpatchify(x_B_T_H_W_O)
+            
+            if intermediate_feature_ids:
+                if len(intermediate_features_outputs) != len(intermediate_feature_ids):
+                    log.warning(
+                        f"Collected {len(intermediate_features_outputs)} intermediate features, "
+                        f"but expected {len(intermediate_feature_ids)}. "
+                        f"Requested IDs: {intermediate_feature_ids}"
+                    )
+                return x_B_C_Tt_Hp_Wp, intermediate_features_outputs, action_output
+            
+            return x_B_C_Tt_Hp_Wp
+        
+        # Original processing without action latent
         # x_B_THW_D = rearrange(x_B_T_H_W_D, "b t h w d -> b (t h w) d")
 
         intermediate_features_outputs = []
         for i, block in enumerate(self.blocks):
+            # print(t_embedding_B_T_D.device)
             x_B_T_H_W_D = block(
                 x_B_T_H_W_D,
                 t_embedding_B_T_D,

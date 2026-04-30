@@ -392,12 +392,30 @@ class CosmosPolicyVideo2WorldModel(CosmosPolicyDiffusionModel):
         return raw_state, latent_state, condition
 
     def denoise(
-        self, xt_B_C_T_H_W: torch.Tensor, sigma: torch.Tensor, condition: Text2WorldCondition
-    ) -> DenoisePrediction:
+        self,
+        xt_B_C_T_H_W: torch.Tensor,
+        sigma: torch.Tensor,
+        condition: Text2WorldCondition,
+        action_latent: Optional[torch.Tensor] = None,
+        num_action_tokens: int = 4,
+    ) -> Tuple[DenoisePrediction, Optional[torch.Tensor]]:
         """
         Performs denoising with optional debugging visualization support.
+        
+        Extended to support action latent concatenation.
 
-        Extended from base to add debugging code for visualizing latent frames.
+        Args:
+            xt_B_C_T_H_W (torch.Tensor): The input noise data.
+            sigma (torch.Tensor): The noise level.
+            condition (Text2WorldCondition): conditional information, generated from self.conditioner
+            action_latent (Optional[torch.Tensor]): Optional action latent tensor [B, num_action_tokens, hidden_dim].
+                If provided, will be concatenated with image tokens in the denoising network.
+            num_action_tokens (int): Number of action tokens. Default: 4.
+
+        Returns:
+            Tuple[DenoisePrediction, Optional[torch.Tensor]]: 
+                - DenoisePrediction: The denoised prediction, includes clean data prediction (x0), noise prediction (eps_pred).
+                - action_output: Optional action output tensor [B, num_action_tokens, hidden_dim] from the network.
         """
         if sigma.ndim == 1:
             sigma_B_T = rearrange(sigma, "b -> b 1")
@@ -438,8 +456,8 @@ class CosmosPolicyVideo2WorldModel(CosmosPolicyDiffusionModel):
                 1 - condition_video_mask_B_1_T_1_1
             )
 
-        # forward pass through the network
-        net_output_B_C_T_H_W = self.net(
+        # forward pass through the network with optional action latent
+        net_output = self.net(
             x_B_C_T_H_W=net_state_in_B_C_T_H_W.to(
                 **self.tensor_kwargs
             ),  # Eq. 7 of https://arxiv.org/pdf/2206.00364.pdf
@@ -450,7 +468,18 @@ class CosmosPolicyVideo2WorldModel(CosmosPolicyDiffusionModel):
                 },
             ),  # Eq. 7 of https://arxiv.org/pdf/2206.00364.pdf
             **condition.to_dict(),
-        ).float()
+            action_latent=action_latent,
+            num_action_tokens=num_action_tokens,
+        )
+        
+        # Handle different return types from network
+        action_output = None
+        if isinstance(net_output, tuple):
+            # Network returns (image_output, intermediate_features, action_output)
+            net_output_B_C_T_H_W = net_output[0].float()
+            action_output = net_output[2] if len(net_output) > 2 else None
+        else:
+            net_output_B_C_T_H_W = net_output.float()
 
         x0_pred_B_C_T_H_W = c_skip_B_1_T_1_1 * xt_B_C_T_H_W + c_out_B_1_T_1_1 * net_output_B_C_T_H_W
         if condition.is_video and self.config.denoise_replace_gt_frames:
@@ -564,7 +593,7 @@ class CosmosPolicyVideo2WorldModel(CosmosPolicyDiffusionModel):
                     Image.fromarray(unnormalized_decoded_denoised_output[SAMPLE_INDEX, idx]).save(save_path)
                     print(f"Saved denoised latent frame at path: {save_path}")
 
-        return DenoisePrediction(x0_pred_B_C_T_H_W, eps_pred_B_C_T_H_W, None)
+        return DenoisePrediction(x0_pred_B_C_T_H_W, eps_pred_B_C_T_H_W, None), action_output
 
     def get_x0_fn_from_batch(
         self,
@@ -745,14 +774,18 @@ class CosmosPolicyVideo2WorldModel(CosmosPolicyDiffusionModel):
             )
 
         def x0_fn(noise_x: torch.Tensor, sigma: torch.Tensor) -> torch.Tensor:
+            # default to false
             if self.config.use_flowunipc_scheduler:
                 cond_velocity = self.denoise_with_velocity(noise_x, sigma, condition)
                 uncond_velocity = self.denoise_with_velocity(noise_x, sigma, uncondition)
                 velocity = uncond_velocity + guidance * (cond_velocity - uncond_velocity)
                 return velocity
-            cond_x0 = self.denoise(noise_x, sigma, condition).x0
+            denoise_output, _ = self.denoise(noise_x, sigma, condition)
+            cond_x0 = denoise_output.x0
+            # default not has this
             if uncondition is not None:
-                uncond_x0 = self.denoise(noise_x, sigma, uncondition).x0
+                uncond_denoise_output, _ = self.denoise(noise_x, sigma, uncondition)
+                uncond_x0 = uncond_denoise_output.x0
                 raw_x0 = cond_x0 + guidance * (cond_x0 - uncond_x0)
             else:
                 raw_x0 = cond_x0
@@ -848,7 +881,7 @@ class CosmosPolicyVideo2WorldModel(CosmosPolicyDiffusionModel):
         # our model expects input of sigma and x_sigma, so convert t -> sigma, x_t to x_sigma
         sigma_B_T = t_B_T / (1.0 - t_B_T)
         x_B_C_T_H_W_in_sigma_space = noise_x_in_t_space * (1.0 + rearrange(sigma_B_T, "b t -> b 1 t 1 1"))
-        denoise_output_B_C_T_H_W = self.denoise(x_B_C_T_H_W_in_sigma_space, sigma_B_T, condition)
+        denoise_output_B_C_T_H_W, _ = self.denoise(x_B_C_T_H_W_in_sigma_space, sigma_B_T, condition)
         x0_pred_B_C_T_H_W = denoise_output_B_C_T_H_W.x0
         eps_pred_B_C_T_H_W = denoise_output_B_C_T_H_W.eps
         return eps_pred_B_C_T_H_W - x0_pred_B_C_T_H_W

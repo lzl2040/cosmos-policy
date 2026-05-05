@@ -24,7 +24,7 @@ from cosmos_policy._src.imaginaire.utils import log
 from cosmos_policy._src.imaginaire.utils.checkpoint_db import get_checkpoint_path  # noqa: F401
 from cosmos_policy.datasets.aloha_dataset import ALOHADataset
 from cosmos_policy.datasets.libero_dataset_v2 import LIBERODataset
-from cosmos_policy.datasets.lerobot_dataset_libero import MultiDatasetforDistTraining
+from cosmos_policy.datasets.lerobot_dataset_v2 import MultiDatasetforDistTraining
 from cosmos_policy.datasets.robocasa_dataset import RoboCasaDataset
 from cosmos_policy.models.policy_video2world_model import CosmosPolicyVideo2WorldModel
 from cosmos_policy.modules.hybrid_edm_sde import HybridEDMSDE
@@ -64,8 +64,8 @@ libero_all_4_suites_dataset = L(MultiDatasetforDistTraining)(
     seed=1001,
     stage="finetune",
     data_mix="libero",
-    # parent_dir="/home/cosmos/.cache/lerobot_data",
-    parent_dir="/mnt/wangxiaofa/robot_dataset/lerobot-format",
+    parent_dir="/home/cosmos/.cache/lerobot_data",
+    # parent_dir="/mnt/wangxiaofa/robot_dataset/lerobot-format",
     vla2root_json="vla2root.json",
     balance_dataset_weights=True,
     max_action_dim=32,

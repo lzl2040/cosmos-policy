@@ -1357,11 +1357,11 @@ class MultiDatasetforDistTraining(torch.utils.data.Dataset):
         else:
             self._dataset_sampling_weights /= weights_sum
         
-        # table_data = [
-        #     [self.dataset_names[i], len(self.datasets[i]), f"{self._dataset_sampling_weights[i]:.4f}"]
-        #         for i in range(len(self.datasets))
-        # ]
-        # print(tabulate(table_data, headers=["Dataset", "Frames", "Ratio"], tablefmt="grid"))
+        table_data = [
+            [self.dataset_names[i], len(self.datasets[i]), f"{self._dataset_sampling_weights[i]:.4f}"]
+                for i in range(len(self.datasets))
+        ]
+        print(tabulate(table_data, headers=["Dataset", "Frames", "Ratio"], tablefmt="grid"))
         # print(f"Total frames: {self._dataset_lengths.sum()}")
         
         if self.stage == "pretrain":

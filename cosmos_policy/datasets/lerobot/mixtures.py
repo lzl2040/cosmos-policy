@@ -264,7 +264,7 @@ OXE_NAMED_MIXTURES: Dict[str, List[Tuple[str, float]]] = {
         ("toto", 1.0),
         ("language_table", 0.1),
         ("stanford_hydra_dataset_converted_externally_to_rlds", 2.0),
-        # ("austin_buds_dataset_converted_externally_to_rlds", 1.0), # state is not quant or rpy
+        ("austin_buds_dataset_converted_externally_to_rlds", 1.0), # state is not quant or rpy
         ("nyu_franka_play_dataset_converted_externally_to_rlds", 3.0),
         ("furniture_bench_dataset_converted_externally_to_rlds", 0.1),
         ("ucsd_kitchen_dataset_converted_externally_to_rlds", 2.0),
@@ -273,7 +273,7 @@ OXE_NAMED_MIXTURES: Dict[str, List[Tuple[str, float]]] = {
         ("dlr_edan_shared_control_converted_externally_to_rlds", 1.0),
         ("iamlab_cmu_pickup_insert_converted_externally_to_rlds", 1.0),
         ("utaustin_mutex", 1.0),
-        # ("berkeley_fanuc_manipulation", 2.0), # state is not quant or rpy
+        ("berkeley_fanuc_manipulation", 2.0), # state is not quant or rpy
         ("cmu_stretch", 1.0),
         ## New Datasets in MagicSoup++
         ("bc_z", 0.2),                                          # Note: use v0.1.0 --> later versions broken

@@ -166,12 +166,12 @@ class DiffusionModel(ImaginaireModel):
         # ace_pt_path = "/home/cosmos/.cache/cosmos_policy/ace/mp_rank_00_model_states.pt"
         # vision_model_name: str = "/home/cosmos/.cache/siglip2-base-patch16-224"
         
-        # ace_pt_path = "/mnt/wangxiaofa/action_chunk_encoder_exp/0425_pretrain_ace_ms_data_bs_512_gather_franka_full/0425_pretrain_ace_ms_data_bs_512_gather_franka_full/global_step7000/mp_rank_00_model_states.pt"
-        # vision_model_name: str = "/mnt/wangxiaofa/pt_weights/siglip2-base-patch16-224/"
+        ace_pt_path = "/mnt/wangxiaofa/action_chunk_encoder_exp/0425_pretrain_ace_ms_data_bs_512_gather_franka_full/0425_pretrain_ace_ms_data_bs_512_gather_franka_full/global_step7000/mp_rank_00_model_states.pt"
+        vision_model_name: str = "/mnt/wangxiaofa/pt_weights/siglip2-base-patch16-224/"
         
         # for b200
-        ace_pt_path = "/mnt/pvc/training_data/weights/pt_ace/step_14k/mp_rank_00_model_states.pt"
-        vision_model_name: str = "/mnt/pvc/training_data/weights/siglip2-base-patch16-224/"
+        # ace_pt_path = "/mnt/pvc/training_data/weights/pt_ace/step_14k/mp_rank_00_model_states.pt"
+        # vision_model_name: str = "/mnt/pvc/training_data/weights/siglip2-base-patch16-224/"
         
         
         self.ace = ACE(vision_model_name=vision_model_name).to(self.precision)

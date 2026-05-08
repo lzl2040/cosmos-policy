@@ -92,7 +92,7 @@ class CosmosPolicyTrainer(ImaginaireTrainer):
             while True:
                 # for pretrain
                 dataloader_train.sampler.set_epoch(epoch)
-                # dataloader_train.dataset.set_epoch(epoch)
+                dataloader_train.dataset.set_epoch(epoch) # finetuning can remove it
                 
                 # dataloader_train_iter = iter(dataloader_train)
                 for data_batch in dataloader_train:

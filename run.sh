@@ -7,6 +7,7 @@ MAX_ACTION_DIM=32
 MAX_STATE_dIM=32
 DATASET_LEN=5000_0000
 ACC_STEP=2
+PARENT_DIR="/mnt/wangxiaofa/robot_dataset/lerobot-format-v21-ort6d"
 
 # 解析命令行参数
 while [[ $# -gt 0 ]]; do
@@ -43,6 +44,10 @@ while [[ $# -gt 0 ]]; do
             DATA_MIX="$2"
             shift 2
             ;;
+        --parent_dir)
+            PARENT_DIR="$2"
+            shift 2
+            ;;
         --stage)
             STAGE="$2"
             shift 2
@@ -71,7 +76,6 @@ while [[ $# -gt 0 ]]; do
 done
 export PATH=/home/aiscuser/.conda/envs/lerobot/bin:$PATH
 export LD_LIBRARY_PATH=/home/aiscuser/.conda/envs/lerobot/lib:$LD_LIBRARY_PATH
-PARENT_DIR="/mnt/wangxiaofa/robot_dataset/lerobot-format-v21-ort6d"
 ffmpeg
 uv run --no-sync --extra cu128 --group libero --python 3.10 \
     python test_ffmpeg.py

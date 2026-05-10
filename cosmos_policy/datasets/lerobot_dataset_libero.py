@@ -1616,12 +1616,13 @@ class MultiDatasetforDistTraining(torch.utils.data.Dataset):
         image_obs_keys = data_config["image_obs_keys"] # contain new_key: old_key mapping, such as "primary": "image", ...
         key_to_pad = []
         for new_key, old_key in image_obs_keys.items():
+            old_img_key = f"observation.images.{old_key}" if f"observation.images.{old_key}" in item else f"images.rgb.{old_key}"
             if old_key != None:
                 # print(item[f"observation.images.{old_key}"][0].shape)
-                item[f"observation.images.{new_key}"] = item[f"observation.images.{old_key}"]
-                exist_image = item[f"observation.images.{old_key}"]
+                item[f"observation.images.{new_key}"] = item[old_img_key]
+                exist_image = item[old_img_key]
                 if new_key != old_key:
-                    del item[f"observation.images.{old_key}"]
+                    del item[old_img_key]
             else:
                 # if missing, use zero image
                 key_to_pad.append(new_key)

@@ -1851,7 +1851,7 @@ class MultiDatasetforDistTraining(torch.utils.data.Dataset):
             "future_proprio": future_proprio if self.use_proprio else torch.zeros_like(item[OBS_ROBOT][FUTURE_IDX]),
             "__key__": index,  # Unique sample identifier (required for callbacks)
             
-            "rollout_data_mask": 0, # demonstration data
+            "rollout_data_mask": 0, # demonstration data, not use it, because it will replace gt_frames with action
             "rollout_data_success_mask": 1,
             "world_model_sample_mask": 0,
             "value_function_sample_mask": 0,

@@ -124,270 +124,270 @@ class CosmosPolicyVideo2WorldModel(CosmosPolicyDiffusionModel):
         # proper elements are treated as additional conditioning input (beyond the usual conditioning inputs)
         # - World model (future state prediction): action chunk is additionally treated as conditioning input
         # - Value function (expected return prediction): action chunk and future state are additionally treated as conditioning input
-        if "rollout_data_mask" in data_batch:
-            # For world model, set the video input mask to 1 for the action frame (i.e. make it a clean/denoised conditioning frame)
-            # For value function, set mask to 1 for everything except the value function return frame (should be 0)
-            world_model_sample_mask = data_batch["world_model_sample_mask"]
-            value_function_sample_mask = data_batch["value_function_sample_mask"]
-            # Expand masks from (B,) to (B, 1, 1, H', W')
-            H_latent, W_latent = condition.condition_video_input_mask_B_C_T_H_W.shape[-2:]
-            world_model_sample_mask = (
-                world_model_sample_mask.unsqueeze(1)
-                .unsqueeze(2)
-                .unsqueeze(3)
-                .unsqueeze(4)
-                .expand(-1, 1, 1, H_latent, W_latent)
-            ).to(condition.condition_video_input_mask_B_C_T_H_W.dtype)
-            value_function_sample_mask = (
-                value_function_sample_mask.unsqueeze(1)
-                .unsqueeze(2)
-                .unsqueeze(3)
-                .unsqueeze(4)
-                .expand(-1, 1, 1, H_latent, W_latent)
-            ).to(condition.condition_video_input_mask_B_C_T_H_W.dtype)
-            # World model: Set the action frame to 1
-            batch_indices = torch.arange(world_model_sample_mask.shape[0], device=world_model_sample_mask.device)
-            condition.condition_video_input_mask_B_C_T_H_W[batch_indices, :, data_batch["action_latent_idx"], :, :] = (
-                world_model_sample_mask[:, :, 0, :, :]
-            )
-            # Value function: Set everything except the value function return frame to 1
-            # First, set all frames to 1 for value function samples
-            T = condition.condition_video_input_mask_B_C_T_H_W.shape[2]
-            value_mask_all_frames = value_function_sample_mask.expand(-1, -1, T, -1, -1)  # (B, 1, T, H', W')
-            condition.condition_video_input_mask_B_C_T_H_W = torch.where(
-                value_mask_all_frames.bool(),
-                torch.ones_like(condition.condition_video_input_mask_B_C_T_H_W),
-                condition.condition_video_input_mask_B_C_T_H_W,
-            )
-            # Then set the value function return frame to 0
-            condition.condition_video_input_mask_B_C_T_H_W[batch_indices, :, data_batch["value_latent_idx"], :, :] = (
-                torch.where(
-                    value_function_sample_mask[:, :, 0, :, :].bool(),
-                    torch.zeros_like(
-                        condition.condition_video_input_mask_B_C_T_H_W[
-                            batch_indices, :, data_batch["value_latent_idx"], :, :
-                        ]
-                    ),
-                    condition.condition_video_input_mask_B_C_T_H_W[
-                        batch_indices, :, data_batch["value_latent_idx"], :, :
-                    ],
-                )
-            )
-            # If we are predicting V(s') instead of V(s, a, s'), mask out the current state and action so that only the
-            # future state is used for future state value prediction
-            if self.config.mask_current_state_action_for_value_prediction:
-                # Mask out current proprio frame
-                if torch.all(data_batch["current_proprio_latent_idx"] != -1):  # -1 indicates proprio is not used
-                    condition.condition_video_input_mask_B_C_T_H_W[
-                        batch_indices, :, data_batch["current_proprio_latent_idx"], :, :
-                    ] = torch.where(
-                        value_function_sample_mask[:, :, 0, :, :].bool(),
-                        torch.zeros_like(
-                            condition.condition_video_input_mask_B_C_T_H_W[
-                                batch_indices, :, data_batch["current_proprio_latent_idx"], :, :
-                            ]
-                        ),
-                        condition.condition_video_input_mask_B_C_T_H_W[
-                            batch_indices, :, data_batch["current_proprio_latent_idx"], :, :
-                        ],
-                    )
-                # Mask out current wrist image frame
-                if torch.all(data_batch["current_wrist_image_latent_idx"] != -1):  # -1 indicates no wrist image is used
-                    condition.condition_video_input_mask_B_C_T_H_W[
-                        batch_indices, :, data_batch["current_wrist_image_latent_idx"], :, :
-                    ] = torch.where(
-                        value_function_sample_mask[:, :, 0, :, :].bool(),
-                        torch.zeros_like(
-                            condition.condition_video_input_mask_B_C_T_H_W[
-                                batch_indices, :, data_batch["current_wrist_image_latent_idx"], :, :
-                            ]
-                        ),
-                        condition.condition_video_input_mask_B_C_T_H_W[
-                            batch_indices, :, data_batch["current_wrist_image_latent_idx"], :, :
-                        ],
-                    )
-                # Mask out current wrist image #2 frame
-                if "current_wrist_image2_latent_idx" in data_batch and torch.all(
-                    data_batch["current_wrist_image2_latent_idx"] != -1
-                ):  # -1 indicates no wrist image is used
-                    condition.condition_video_input_mask_B_C_T_H_W[
-                        batch_indices, :, data_batch["current_wrist_image2_latent_idx"], :, :
-                    ] = torch.where(
-                        value_function_sample_mask[:, :, 0, :, :].bool(),
-                        torch.zeros_like(
-                            condition.condition_video_input_mask_B_C_T_H_W[
-                                batch_indices, :, data_batch["current_wrist_image2_latent_idx"], :, :
-                            ]
-                        ),
-                        condition.condition_video_input_mask_B_C_T_H_W[
-                            batch_indices, :, data_batch["current_wrist_image2_latent_idx"], :, :
-                        ],
-                    )
-                # Mask out current image frame (primary image)
-                if torch.all(data_batch["current_image_latent_idx"] != -1):  # -1 indicates primary image is not used
-                    condition.condition_video_input_mask_B_C_T_H_W[
-                        batch_indices, :, data_batch["current_image_latent_idx"], :, :
-                    ] = torch.where(
-                        value_function_sample_mask[:, :, 0, :, :].bool(),
-                        torch.zeros_like(
-                            condition.condition_video_input_mask_B_C_T_H_W[
-                                batch_indices, :, data_batch["current_image_latent_idx"], :, :
-                            ]
-                        ),
-                        condition.condition_video_input_mask_B_C_T_H_W[
-                            batch_indices, :, data_batch["current_image_latent_idx"], :, :
-                        ],
-                    )
-                # Mask out current image #2 frame (secondary image)
-                if "current_image2_latent_idx" in data_batch and torch.all(
-                    data_batch["current_image2_latent_idx"] != -1
-                ):  # -1 indicates secondary image is not used
-                    condition.condition_video_input_mask_B_C_T_H_W[
-                        batch_indices, :, data_batch["current_image2_latent_idx"], :, :
-                    ] = torch.where(
-                        value_function_sample_mask[:, :, 0, :, :].bool(),
-                        torch.zeros_like(
-                            condition.condition_video_input_mask_B_C_T_H_W[
-                                batch_indices, :, data_batch["current_image2_latent_idx"], :, :
-                            ]
-                        ),
-                        condition.condition_video_input_mask_B_C_T_H_W[
-                            batch_indices, :, data_batch["current_image2_latent_idx"], :, :
-                        ],
-                    )
-                # Mask out action frame
-                condition.condition_video_input_mask_B_C_T_H_W[
-                    batch_indices, :, data_batch["action_latent_idx"], :, :
-                ] = torch.where(
-                    value_function_sample_mask[:, :, 0, :, :].bool(),
-                    torch.zeros_like(
-                        condition.condition_video_input_mask_B_C_T_H_W[
-                            batch_indices, :, data_batch["action_latent_idx"], :, :
-                        ]
-                    ),
-                    condition.condition_video_input_mask_B_C_T_H_W[
-                        batch_indices, :, data_batch["action_latent_idx"], :, :
-                    ],
-                )
-            # If we are predicting Q(s, a) instead of V(s, a, s'), mask out the future state so that only the
-            # current state and action are used for Q(s, a) prediction
-            if self.config.mask_future_state_for_qvalue_prediction:
-                # Mask out future proprio frame
-                if torch.all(data_batch["future_proprio_latent_idx"] != -1):  # -1 indicates proprio is not used
-                    condition.condition_video_input_mask_B_C_T_H_W[
-                        batch_indices, :, data_batch["future_proprio_latent_idx"], :, :
-                    ] = torch.where(
-                        value_function_sample_mask[:, :, 0, :, :].bool(),
-                        torch.zeros_like(
-                            condition.condition_video_input_mask_B_C_T_H_W[
-                                batch_indices, :, data_batch["future_proprio_latent_idx"], :, :
-                            ]
-                        ),
-                        condition.condition_video_input_mask_B_C_T_H_W[
-                            batch_indices, :, data_batch["future_proprio_latent_idx"], :, :
-                        ],
-                    )
-                # Mask out future wrist image frame
-                if torch.all(data_batch["future_wrist_image_latent_idx"] != -1):  # -1 indicates no wrist image is used
-                    condition.condition_video_input_mask_B_C_T_H_W[
-                        batch_indices, :, data_batch["future_wrist_image_latent_idx"], :, :
-                    ] = torch.where(
-                        value_function_sample_mask[:, :, 0, :, :].bool(),
-                        torch.zeros_like(
-                            condition.condition_video_input_mask_B_C_T_H_W[
-                                batch_indices, :, data_batch["future_wrist_image_latent_idx"], :, :
-                            ]
-                        ),
-                        condition.condition_video_input_mask_B_C_T_H_W[
-                            batch_indices, :, data_batch["future_wrist_image_latent_idx"], :, :
-                        ],
-                    )
-                # Mask out future wrist image #2 frame
-                if "future_wrist_image2_latent_idx" in data_batch and torch.all(
-                    data_batch["future_wrist_image2_latent_idx"] != -1
-                ):  # -1 indicates no wrist image is used
-                    condition.condition_video_input_mask_B_C_T_H_W[
-                        batch_indices, :, data_batch["future_wrist_image2_latent_idx"], :, :
-                    ] = torch.where(
-                        value_function_sample_mask[:, :, 0, :, :].bool(),
-                        torch.zeros_like(
-                            condition.condition_video_input_mask_B_C_T_H_W[
-                                batch_indices, :, data_batch["future_wrist_image2_latent_idx"], :, :
-                            ]
-                        ),
-                        condition.condition_video_input_mask_B_C_T_H_W[
-                            batch_indices, :, data_batch["future_wrist_image2_latent_idx"], :, :
-                        ],
-                    )
-                # Mask out future image frame (primary image)
-                if torch.all(data_batch["future_image_latent_idx"] != -1):  # -1 indicates primary image is not used
-                    condition.condition_video_input_mask_B_C_T_H_W[
-                        batch_indices, :, data_batch["future_image_latent_idx"], :, :
-                    ] = torch.where(
-                        value_function_sample_mask[:, :, 0, :, :].bool(),
-                        torch.zeros_like(
-                            condition.condition_video_input_mask_B_C_T_H_W[
-                                batch_indices, :, data_batch["future_image_latent_idx"], :, :
-                            ]
-                        ),
-                        condition.condition_video_input_mask_B_C_T_H_W[
-                            batch_indices, :, data_batch["future_image_latent_idx"], :, :
-                        ],
-                    )
-                # Mask out future image #2 frame (secondary image)
-                if "future_image2_latent_idx" in data_batch and torch.all(
-                    data_batch["future_image2_latent_idx"] != -1
-                ):  # -1 indicates secondary image is not used
-                    condition.condition_video_input_mask_B_C_T_H_W[
-                        batch_indices, :, data_batch["future_image2_latent_idx"], :, :
-                    ] = torch.where(
-                        value_function_sample_mask[:, :, 0, :, :].bool(),
-                        torch.zeros_like(
-                            condition.condition_video_input_mask_B_C_T_H_W[
-                                batch_indices, :, data_batch["future_image2_latent_idx"], :, :
-                            ]
-                        ),
-                        condition.condition_video_input_mask_B_C_T_H_W[
-                            batch_indices, :, data_batch["future_image2_latent_idx"], :, :
-                        ],
-                    )
-            # Additionally, add the action chunk to the gt_frames so that the actions are added in later based on the mask
-            # No need to do this for the other frames; actions are special because they are manually injected
-            condition.orig_gt_frames = condition.gt_frames.clone()  # Keep a backup of the original gt_frames
-            condition.gt_frames = replace_latent_with_action_chunk(
-                condition.gt_frames, data_batch["actions"], action_indices=data_batch["action_latent_idx"]
-            )
+        # if "rollout_data_mask" in data_batch:
+        #     # For world model, set the video input mask to 1 for the action frame (i.e. make it a clean/denoised conditioning frame)
+        #     # For value function, set mask to 1 for everything except the value function return frame (should be 0)
+        #     world_model_sample_mask = data_batch["world_model_sample_mask"]
+        #     value_function_sample_mask = data_batch["value_function_sample_mask"]
+        #     # Expand masks from (B,) to (B, 1, 1, H', W')
+        #     H_latent, W_latent = condition.condition_video_input_mask_B_C_T_H_W.shape[-2:]
+        #     world_model_sample_mask = (
+        #         world_model_sample_mask.unsqueeze(1)
+        #         .unsqueeze(2)
+        #         .unsqueeze(3)
+        #         .unsqueeze(4)
+        #         .expand(-1, 1, 1, H_latent, W_latent)
+        #     ).to(condition.condition_video_input_mask_B_C_T_H_W.dtype)
+        #     value_function_sample_mask = (
+        #         value_function_sample_mask.unsqueeze(1)
+        #         .unsqueeze(2)
+        #         .unsqueeze(3)
+        #         .unsqueeze(4)
+        #         .expand(-1, 1, 1, H_latent, W_latent)
+        #     ).to(condition.condition_video_input_mask_B_C_T_H_W.dtype)
+        #     # World model: Set the action frame to 1
+        #     batch_indices = torch.arange(world_model_sample_mask.shape[0], device=world_model_sample_mask.device)
+        #     condition.condition_video_input_mask_B_C_T_H_W[batch_indices, :, data_batch["action_latent_idx"], :, :] = (
+        #         world_model_sample_mask[:, :, 0, :, :]
+        #     )
+        #     # Value function: Set everything except the value function return frame to 1
+        #     # First, set all frames to 1 for value function samples
+        #     T = condition.condition_video_input_mask_B_C_T_H_W.shape[2]
+        #     value_mask_all_frames = value_function_sample_mask.expand(-1, -1, T, -1, -1)  # (B, 1, T, H', W')
+        #     condition.condition_video_input_mask_B_C_T_H_W = torch.where(
+        #         value_mask_all_frames.bool(),
+        #         torch.ones_like(condition.condition_video_input_mask_B_C_T_H_W),
+        #         condition.condition_video_input_mask_B_C_T_H_W,
+        #     )
+        #     # Then set the value function return frame to 0
+        #     condition.condition_video_input_mask_B_C_T_H_W[batch_indices, :, data_batch["value_latent_idx"], :, :] = (
+        #         torch.where(
+        #             value_function_sample_mask[:, :, 0, :, :].bool(),
+        #             torch.zeros_like(
+        #                 condition.condition_video_input_mask_B_C_T_H_W[
+        #                     batch_indices, :, data_batch["value_latent_idx"], :, :
+        #                 ]
+        #             ),
+        #             condition.condition_video_input_mask_B_C_T_H_W[
+        #                 batch_indices, :, data_batch["value_latent_idx"], :, :
+        #             ],
+        #         )
+        #     )
+        #     # If we are predicting V(s') instead of V(s, a, s'), mask out the current state and action so that only the
+        #     # future state is used for future state value prediction
+        #     if self.config.mask_current_state_action_for_value_prediction:
+        #         # Mask out current proprio frame
+        #         if torch.all(data_batch["current_proprio_latent_idx"] != -1):  # -1 indicates proprio is not used
+        #             condition.condition_video_input_mask_B_C_T_H_W[
+        #                 batch_indices, :, data_batch["current_proprio_latent_idx"], :, :
+        #             ] = torch.where(
+        #                 value_function_sample_mask[:, :, 0, :, :].bool(),
+        #                 torch.zeros_like(
+        #                     condition.condition_video_input_mask_B_C_T_H_W[
+        #                         batch_indices, :, data_batch["current_proprio_latent_idx"], :, :
+        #                     ]
+        #                 ),
+        #                 condition.condition_video_input_mask_B_C_T_H_W[
+        #                     batch_indices, :, data_batch["current_proprio_latent_idx"], :, :
+        #                 ],
+        #             )
+        #         # Mask out current wrist image frame
+        #         if torch.all(data_batch["current_wrist_image_latent_idx"] != -1):  # -1 indicates no wrist image is used
+        #             condition.condition_video_input_mask_B_C_T_H_W[
+        #                 batch_indices, :, data_batch["current_wrist_image_latent_idx"], :, :
+        #             ] = torch.where(
+        #                 value_function_sample_mask[:, :, 0, :, :].bool(),
+        #                 torch.zeros_like(
+        #                     condition.condition_video_input_mask_B_C_T_H_W[
+        #                         batch_indices, :, data_batch["current_wrist_image_latent_idx"], :, :
+        #                     ]
+        #                 ),
+        #                 condition.condition_video_input_mask_B_C_T_H_W[
+        #                     batch_indices, :, data_batch["current_wrist_image_latent_idx"], :, :
+        #                 ],
+        #             )
+        #         # Mask out current wrist image #2 frame
+        #         if "current_wrist_image2_latent_idx" in data_batch and torch.all(
+        #             data_batch["current_wrist_image2_latent_idx"] != -1
+        #         ):  # -1 indicates no wrist image is used
+        #             condition.condition_video_input_mask_B_C_T_H_W[
+        #                 batch_indices, :, data_batch["current_wrist_image2_latent_idx"], :, :
+        #             ] = torch.where(
+        #                 value_function_sample_mask[:, :, 0, :, :].bool(),
+        #                 torch.zeros_like(
+        #                     condition.condition_video_input_mask_B_C_T_H_W[
+        #                         batch_indices, :, data_batch["current_wrist_image2_latent_idx"], :, :
+        #                     ]
+        #                 ),
+        #                 condition.condition_video_input_mask_B_C_T_H_W[
+        #                     batch_indices, :, data_batch["current_wrist_image2_latent_idx"], :, :
+        #                 ],
+        #             )
+        #         # Mask out current image frame (primary image)
+        #         if torch.all(data_batch["current_image_latent_idx"] != -1):  # -1 indicates primary image is not used
+        #             condition.condition_video_input_mask_B_C_T_H_W[
+        #                 batch_indices, :, data_batch["current_image_latent_idx"], :, :
+        #             ] = torch.where(
+        #                 value_function_sample_mask[:, :, 0, :, :].bool(),
+        #                 torch.zeros_like(
+        #                     condition.condition_video_input_mask_B_C_T_H_W[
+        #                         batch_indices, :, data_batch["current_image_latent_idx"], :, :
+        #                     ]
+        #                 ),
+        #                 condition.condition_video_input_mask_B_C_T_H_W[
+        #                     batch_indices, :, data_batch["current_image_latent_idx"], :, :
+        #                 ],
+        #             )
+        #         # Mask out current image #2 frame (secondary image)
+        #         if "current_image2_latent_idx" in data_batch and torch.all(
+        #             data_batch["current_image2_latent_idx"] != -1
+        #         ):  # -1 indicates secondary image is not used
+        #             condition.condition_video_input_mask_B_C_T_H_W[
+        #                 batch_indices, :, data_batch["current_image2_latent_idx"], :, :
+        #             ] = torch.where(
+        #                 value_function_sample_mask[:, :, 0, :, :].bool(),
+        #                 torch.zeros_like(
+        #                     condition.condition_video_input_mask_B_C_T_H_W[
+        #                         batch_indices, :, data_batch["current_image2_latent_idx"], :, :
+        #                     ]
+        #                 ),
+        #                 condition.condition_video_input_mask_B_C_T_H_W[
+        #                     batch_indices, :, data_batch["current_image2_latent_idx"], :, :
+        #                 ],
+        #             )
+        #         # Mask out action frame
+        #         condition.condition_video_input_mask_B_C_T_H_W[
+        #             batch_indices, :, data_batch["action_latent_idx"], :, :
+        #         ] = torch.where(
+        #             value_function_sample_mask[:, :, 0, :, :].bool(),
+        #             torch.zeros_like(
+        #                 condition.condition_video_input_mask_B_C_T_H_W[
+        #                     batch_indices, :, data_batch["action_latent_idx"], :, :
+        #                 ]
+        #             ),
+        #             condition.condition_video_input_mask_B_C_T_H_W[
+        #                 batch_indices, :, data_batch["action_latent_idx"], :, :
+        #             ],
+        #         )
+        #     # If we are predicting Q(s, a) instead of V(s, a, s'), mask out the future state so that only the
+        #     # current state and action are used for Q(s, a) prediction
+        #     if self.config.mask_future_state_for_qvalue_prediction:
+        #         # Mask out future proprio frame
+        #         if torch.all(data_batch["future_proprio_latent_idx"] != -1):  # -1 indicates proprio is not used
+        #             condition.condition_video_input_mask_B_C_T_H_W[
+        #                 batch_indices, :, data_batch["future_proprio_latent_idx"], :, :
+        #             ] = torch.where(
+        #                 value_function_sample_mask[:, :, 0, :, :].bool(),
+        #                 torch.zeros_like(
+        #                     condition.condition_video_input_mask_B_C_T_H_W[
+        #                         batch_indices, :, data_batch["future_proprio_latent_idx"], :, :
+        #                     ]
+        #                 ),
+        #                 condition.condition_video_input_mask_B_C_T_H_W[
+        #                     batch_indices, :, data_batch["future_proprio_latent_idx"], :, :
+        #                 ],
+        #             )
+        #         # Mask out future wrist image frame
+        #         if torch.all(data_batch["future_wrist_image_latent_idx"] != -1):  # -1 indicates no wrist image is used
+        #             condition.condition_video_input_mask_B_C_T_H_W[
+        #                 batch_indices, :, data_batch["future_wrist_image_latent_idx"], :, :
+        #             ] = torch.where(
+        #                 value_function_sample_mask[:, :, 0, :, :].bool(),
+        #                 torch.zeros_like(
+        #                     condition.condition_video_input_mask_B_C_T_H_W[
+        #                         batch_indices, :, data_batch["future_wrist_image_latent_idx"], :, :
+        #                     ]
+        #                 ),
+        #                 condition.condition_video_input_mask_B_C_T_H_W[
+        #                     batch_indices, :, data_batch["future_wrist_image_latent_idx"], :, :
+        #                 ],
+        #             )
+        #         # Mask out future wrist image #2 frame
+        #         if "future_wrist_image2_latent_idx" in data_batch and torch.all(
+        #             data_batch["future_wrist_image2_latent_idx"] != -1
+        #         ):  # -1 indicates no wrist image is used
+        #             condition.condition_video_input_mask_B_C_T_H_W[
+        #                 batch_indices, :, data_batch["future_wrist_image2_latent_idx"], :, :
+        #             ] = torch.where(
+        #                 value_function_sample_mask[:, :, 0, :, :].bool(),
+        #                 torch.zeros_like(
+        #                     condition.condition_video_input_mask_B_C_T_H_W[
+        #                         batch_indices, :, data_batch["future_wrist_image2_latent_idx"], :, :
+        #                     ]
+        #                 ),
+        #                 condition.condition_video_input_mask_B_C_T_H_W[
+        #                     batch_indices, :, data_batch["future_wrist_image2_latent_idx"], :, :
+        #                 ],
+        #             )
+        #         # Mask out future image frame (primary image)
+        #         if torch.all(data_batch["future_image_latent_idx"] != -1):  # -1 indicates primary image is not used
+        #             condition.condition_video_input_mask_B_C_T_H_W[
+        #                 batch_indices, :, data_batch["future_image_latent_idx"], :, :
+        #             ] = torch.where(
+        #                 value_function_sample_mask[:, :, 0, :, :].bool(),
+        #                 torch.zeros_like(
+        #                     condition.condition_video_input_mask_B_C_T_H_W[
+        #                         batch_indices, :, data_batch["future_image_latent_idx"], :, :
+        #                     ]
+        #                 ),
+        #                 condition.condition_video_input_mask_B_C_T_H_W[
+        #                     batch_indices, :, data_batch["future_image_latent_idx"], :, :
+        #                 ],
+        #             )
+        #         # Mask out future image #2 frame (secondary image)
+        #         if "future_image2_latent_idx" in data_batch and torch.all(
+        #             data_batch["future_image2_latent_idx"] != -1
+        #         ):  # -1 indicates secondary image is not used
+        #             condition.condition_video_input_mask_B_C_T_H_W[
+        #                 batch_indices, :, data_batch["future_image2_latent_idx"], :, :
+        #             ] = torch.where(
+        #                 value_function_sample_mask[:, :, 0, :, :].bool(),
+        #                 torch.zeros_like(
+        #                     condition.condition_video_input_mask_B_C_T_H_W[
+        #                         batch_indices, :, data_batch["future_image2_latent_idx"], :, :
+        #                     ]
+        #                 ),
+        #                 condition.condition_video_input_mask_B_C_T_H_W[
+        #                     batch_indices, :, data_batch["future_image2_latent_idx"], :, :
+        #                 ],
+        #             )
+        #     # Additionally, add the action chunk to the gt_frames so that the actions are added in later based on the mask
+        #     # No need to do this for the other frames; actions are special because they are manually injected
+        #     condition.orig_gt_frames = condition.gt_frames.clone()  # Keep a backup of the original gt_frames
+        #     condition.gt_frames = replace_latent_with_action_chunk(
+        #         condition.gt_frames, data_batch["actions"], action_indices=data_batch["action_latent_idx"]
+        #     )
 
-        # Manually add in the current and future proprio to the condition.gt_frames as well
-        if "proprio" in data_batch and torch.all(
-            data_batch["current_proprio_latent_idx"] != -1
-        ):  # -1 indicates proprio is not used
-            condition.gt_frames = replace_latent_with_proprio(
-                condition.gt_frames,
-                data_batch["proprio"],
-                proprio_indices=data_batch["current_proprio_latent_idx"],
-            )
-        if "future_proprio" in data_batch and torch.all(
-            data_batch["future_proprio_latent_idx"] != -1
-        ):  # -1 indicates proprio is not used
-            condition.gt_frames = replace_latent_with_proprio(
-                condition.gt_frames,
-                data_batch["future_proprio"],
-                proprio_indices=data_batch["future_proprio_latent_idx"],
-            )
+        # # Manually add in the current and future proprio to the condition.gt_frames as well
+        # if "proprio" in data_batch and torch.all(
+        #     data_batch["current_proprio_latent_idx"] != -1
+        # ):  # -1 indicates proprio is not used
+        #     condition.gt_frames = replace_latent_with_proprio(
+        #         condition.gt_frames,
+        #         data_batch["proprio"],
+        #         proprio_indices=data_batch["current_proprio_latent_idx"],
+        #     )
+        # if "future_proprio" in data_batch and torch.all(
+        #     data_batch["future_proprio_latent_idx"] != -1
+        # ):  # -1 indicates proprio is not used
+        #     condition.gt_frames = replace_latent_with_proprio(
+        #         condition.gt_frames,
+        #         data_batch["future_proprio"],
+        #         proprio_indices=data_batch["future_proprio_latent_idx"],
+        #     )
 
-        # Manually add in value to the condition.gt_frames as well
-        # (This is actually not needed for training because the value is not used as conditioning, but it may be useful
-        # for visualizations when decoding the ground-truth latents to images)
-        if torch.all(data_batch["value_latent_idx"] != -1) and "value_function_return" in data_batch:
-            batch_indices = torch.arange(condition.gt_frames.shape[0], device=condition.gt_frames.device)
-            _, C_latent, _, H_latent, W_latent = condition.gt_frames.shape
-            condition.gt_frames[batch_indices, :, data_batch["value_latent_idx"], :, :] = (
-                data_batch["value_function_return"]
-                .reshape(-1, 1, 1, 1)
-                .expand(-1, C_latent, H_latent, W_latent)
-                .to(condition.gt_frames.dtype)
-            )
+        # # Manually add in value to the condition.gt_frames as well
+        # # (This is actually not needed for training because the value is not used as conditioning, but it may be useful
+        # # for visualizations when decoding the ground-truth latents to images)
+        # if torch.all(data_batch["value_latent_idx"] != -1) and "value_function_return" in data_batch:
+        #     batch_indices = torch.arange(condition.gt_frames.shape[0], device=condition.gt_frames.device)
+        #     _, C_latent, _, H_latent, W_latent = condition.gt_frames.shape
+        #     condition.gt_frames[batch_indices, :, data_batch["value_latent_idx"], :, :] = (
+        #         data_batch["value_function_return"]
+        #         .reshape(-1, 1, 1, 1)
+        #         .expand(-1, C_latent, H_latent, W_latent)
+        #         .to(condition.gt_frames.dtype)
+        #     )
 
         return raw_state, latent_state, condition
 
@@ -468,8 +468,8 @@ class CosmosPolicyVideo2WorldModel(CosmosPolicyDiffusionModel):
                 },
             ),  # Eq. 7 of https://arxiv.org/pdf/2206.00364.pdf
             **condition.to_dict(),
-            action_latent=action_latent,
-            num_action_tokens=num_action_tokens,
+            # action_latent=action_latent,
+            # num_action_tokens=num_action_tokens,
         )
         
         # Handle different return types from network

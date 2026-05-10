@@ -307,8 +307,8 @@ class CosmosPolicyDiffusionModel(BaseDiffusionModel):
                 **self.tensor_kwargs
             ),  # Eq. 7 of https://arxiv.org/pdf/2206.00364.pdf
             **condition.to_dict(),
-            action_latent=action_latent,
-            num_action_tokens=num_action_tokens,
+            # action_latent=action_latent,
+            # num_action_tokens=num_action_tokens,
         )
         
         # Handle different return types from network
@@ -535,13 +535,15 @@ class CosmosPolicyDiffusionModel(BaseDiffusionModel):
             kendall_loss_action_l1_loss = torch.abs(pred_action - action_chunk).mean()
         else:
             # Fallback: extract from image latent (old behavior)
-            action_shape = action_embeddings.shape[1:]
-            pred_action_embeds = extract_action_chunk_from_latent_sequence(model_pred.x0, action_shape, action_indices)
-            pred_action = self.action_decoder(pred_action_embeds)  # [B, chunk_size // group_size, action_dim]
-            pred_action = pred_action.view(pred_action.shape[0], pred_action.shape[1], self.action_group_size, -1) 
-            pred_action = pred_action.view(pred_action.shape[0], -1, pred_action.shape[-1])  # [B, chunk_size, action_dim]
-            kendall_loss_action_mse_loss = ((pred_action - action_chunk) ** 2).mean()
-            kendall_loss_action_l1_loss = torch.abs(pred_action - action_chunk).mean()
+            # action_shape = action_embeddings.shape[1:]
+            # pred_action_embeds = extract_action_chunk_from_latent_sequence(model_pred.x0, action_shape, action_indices)
+            # pred_action = self.action_decoder(pred_action_embeds)  # [B, chunk_size // group_size, action_dim]
+            # pred_action = pred_action.view(pred_action.shape[0], pred_action.shape[1], self.action_group_size, -1) 
+            # pred_action = pred_action.view(pred_action.shape[0], -1, pred_action.shape[-1])  # [B, chunk_size, action_dim]
+            # kendall_loss_action_mse_loss = ((pred_action - action_chunk) ** 2).mean()
+            # kendall_loss_action_l1_loss = torch.abs(pred_action - action_chunk).mean()
+            kendall_loss_action_mse_loss = torch.tensor(0.0, device=kendall_loss_wo_action.device)
+            kendall_loss_action_l1_loss = torch.tensor(0.0, device=kendall_loss_wo_action.device)
         
         # for state decoding
         # state_shape = (1, state_embeddings.shape[1])

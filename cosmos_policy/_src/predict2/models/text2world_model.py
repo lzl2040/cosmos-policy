@@ -170,7 +170,7 @@ class DiffusionModel(ImaginaireModel):
         # vision_model_name: str = "/mnt/wangxiaofa/pt_weights/siglip2-base-patch16-224/"
         
         # for b200
-        ace_pt_path = "/mnt/pvc/training_data/weights/pt_ace/step_40k/mp_rank_00_model_states.pt"
+        ace_pt_path = "/mnt/pvc/training_data/weights/pt_ace/step_26k/mp_rank_00_model_states.pt"
         vision_model_name: str = "/mnt/pvc/training_data/weights/siglip2-base-patch16-224/"
         
         

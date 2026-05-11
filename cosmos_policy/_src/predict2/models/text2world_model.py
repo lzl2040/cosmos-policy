@@ -176,7 +176,9 @@ class DiffusionModel(ImaginaireModel):
         
         self.ace = ACE(vision_model_name=vision_model_name).to(self.precision)
         weights = torch.load(ace_pt_path, map_location="cpu")["module"]
-        self.ace.load_state_dict(weights, strict=True)
+        missing_keys, unexpected_keys = self.ace.load_state_dict(weights, strict=False)
+        print("missing_keys:", missing_keys)
+        print("unexpected_keys:", unexpected_keys)
         print(f"Load ace weights from:{ace_pt_path}")
 
         # 3. tokenizer

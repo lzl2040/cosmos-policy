@@ -75,18 +75,18 @@ class WandbCallback(WandBCallbackImage):
         self.train_demo_sample_future_wrist_image_l1_loss_log = _LossRecordNoEDM()
         self.train_demo_sample_future_image_mse_loss_log = _LossRecordNoEDM()
         self.train_demo_sample_future_image_l1_loss_log = _LossRecordNoEDM()
-        self.train_demo_sample_value_mse_loss_log = _LossRecordNoEDM()
-        self.train_demo_sample_value_l1_loss_log = _LossRecordNoEDM()
+        # self.train_demo_sample_value_mse_loss_log = _LossRecordNoEDM()
+        # self.train_demo_sample_value_l1_loss_log = _LossRecordNoEDM()
         self.train_world_model_sample_future_proprio_mse_loss_log = _LossRecordNoEDM()
         self.train_world_model_sample_future_proprio_l1_loss_log = _LossRecordNoEDM()
         self.train_world_model_sample_future_wrist_image_mse_loss_log = _LossRecordNoEDM()
         self.train_world_model_sample_future_wrist_image_l1_loss_log = _LossRecordNoEDM()
         self.train_world_model_sample_future_image_mse_loss_log = _LossRecordNoEDM()
         self.train_world_model_sample_future_image_l1_loss_log = _LossRecordNoEDM()
-        self.train_world_model_sample_value_mse_loss_log = _LossRecordNoEDM()
-        self.train_world_model_sample_value_l1_loss_log = _LossRecordNoEDM()
-        self.train_value_function_sample_value_mse_loss_log = _LossRecordNoEDM()
-        self.train_value_function_sample_value_l1_loss_log = _LossRecordNoEDM()
+        # self.train_world_model_sample_value_mse_loss_log = _LossRecordNoEDM()
+        # self.train_world_model_sample_value_l1_loss_log = _LossRecordNoEDM()
+        # self.train_value_function_sample_value_mse_loss_log = _LossRecordNoEDM()
+        # self.train_value_function_sample_value_l1_loss_log = _LossRecordNoEDM()
         self.train_img_unstable_count = torch.zeros(1, device="cuda")
         self.train_video_unstable_count = torch.zeros(1, device="cuda")
 
@@ -212,14 +212,14 @@ class WandbCallback(WandBCallbackImage):
             if not torch.isnan(demo_sample_future_image_l1_loss):
                 self.train_demo_sample_future_image_l1_loss_log.loss += demo_sample_future_image_l1_loss
                 self.train_demo_sample_future_image_l1_loss_log.iter_count += 1
-            demo_sample_value_mse_loss = output_batch["demo_sample_value_mse_loss"].detach().float()
-            if not torch.isnan(demo_sample_value_mse_loss):
-                self.train_demo_sample_value_mse_loss_log.loss += demo_sample_value_mse_loss
-                self.train_demo_sample_value_mse_loss_log.iter_count += 1
-            demo_sample_value_l1_loss = output_batch["demo_sample_value_l1_loss"].detach().float()
-            if not torch.isnan(demo_sample_value_l1_loss):
-                self.train_demo_sample_value_l1_loss_log.loss += demo_sample_value_l1_loss
-                self.train_demo_sample_value_l1_loss_log.iter_count += 1
+            # demo_sample_value_mse_loss = output_batch["demo_sample_value_mse_loss"].detach().float()
+            # if not torch.isnan(demo_sample_value_mse_loss):
+            #     self.train_demo_sample_value_mse_loss_log.loss += demo_sample_value_mse_loss
+            #     self.train_demo_sample_value_mse_loss_log.iter_count += 1
+            # demo_sample_value_l1_loss = output_batch["demo_sample_value_l1_loss"].detach().float()
+            # if not torch.isnan(demo_sample_value_l1_loss):
+            #     self.train_demo_sample_value_l1_loss_log.loss += demo_sample_value_l1_loss
+            #     self.train_demo_sample_value_l1_loss_log.iter_count += 1
 
             world_model_sample_future_proprio_mse_loss = (
                 output_batch["world_model_sample_future_proprio_mse_loss"].detach().float()
@@ -265,23 +265,23 @@ class WandbCallback(WandBCallbackImage):
             if not torch.isnan(world_model_sample_future_image_l1_loss):
                 self.train_world_model_sample_future_image_l1_loss_log.loss += world_model_sample_future_image_l1_loss
                 self.train_world_model_sample_future_image_l1_loss_log.iter_count += 1
-            world_model_sample_value_mse_loss = output_batch["world_model_sample_value_mse_loss"].detach().float()
-            if not torch.isnan(world_model_sample_value_mse_loss):
-                self.train_world_model_sample_value_mse_loss_log.loss += world_model_sample_value_mse_loss
-                self.train_world_model_sample_value_mse_loss_log.iter_count += 1
-            world_model_sample_value_l1_loss = output_batch["world_model_sample_value_l1_loss"].detach().float()
-            if not torch.isnan(world_model_sample_value_l1_loss):
-                self.train_world_model_sample_value_l1_loss_log.loss += world_model_sample_value_l1_loss
-                self.train_world_model_sample_value_l1_loss_log.iter_count += 1
+            # world_model_sample_value_mse_loss = output_batch["world_model_sample_value_mse_loss"].detach().float()
+            # if not torch.isnan(world_model_sample_value_mse_loss):
+            #     self.train_world_model_sample_value_mse_loss_log.loss += world_model_sample_value_mse_loss
+            #     self.train_world_model_sample_value_mse_loss_log.iter_count += 1
+            # world_model_sample_value_l1_loss = output_batch["world_model_sample_value_l1_loss"].detach().float()
+            # if not torch.isnan(world_model_sample_value_l1_loss):
+            #     self.train_world_model_sample_value_l1_loss_log.loss += world_model_sample_value_l1_loss
+            #     self.train_world_model_sample_value_l1_loss_log.iter_count += 1
 
-            value_function_sample_value_mse_loss = output_batch["value_function_sample_value_mse_loss"].detach().float()
-            if not torch.isnan(value_function_sample_value_mse_loss):
-                self.train_value_function_sample_value_mse_loss_log.loss += value_function_sample_value_mse_loss
-                self.train_value_function_sample_value_mse_loss_log.iter_count += 1
-            value_function_sample_value_l1_loss = output_batch["value_function_sample_value_l1_loss"].detach().float()
-            if not torch.isnan(value_function_sample_value_l1_loss):
-                self.train_value_function_sample_value_l1_loss_log.loss += value_function_sample_value_l1_loss
-                self.train_value_function_sample_value_l1_loss_log.iter_count += 1
+            # value_function_sample_value_mse_loss = output_batch["value_function_sample_value_mse_loss"].detach().float()
+            # if not torch.isnan(value_function_sample_value_mse_loss):
+            #     self.train_value_function_sample_value_mse_loss_log.loss += value_function_sample_value_mse_loss
+            #     self.train_value_function_sample_value_mse_loss_log.iter_count += 1
+            # value_function_sample_value_l1_loss = output_batch["value_function_sample_value_l1_loss"].detach().float()
+            # if not torch.isnan(value_function_sample_value_l1_loss):
+            #     self.train_value_function_sample_value_l1_loss_log.loss += value_function_sample_value_l1_loss
+            #     self.train_value_function_sample_value_l1_loss_log.iter_count += 1
 
         else:
             if model.is_image_batch(data_batch):
@@ -306,8 +306,8 @@ class WandbCallback(WandBCallbackImage):
             avg_future_wrist_image_l1_loss = self.train_demo_sample_future_wrist_image_l1_loss_log.get_stat()
             avg_demo_sample_future_image_mse_loss = self.train_demo_sample_future_image_mse_loss_log.get_stat()
             avg_demo_sample_future_image_l1_loss = self.train_demo_sample_future_image_l1_loss_log.get_stat()
-            avg_demo_sample_value_mse_loss = self.train_demo_sample_value_mse_loss_log.get_stat()
-            avg_demo_sample_value_l1_loss = self.train_demo_sample_value_l1_loss_log.get_stat()
+            # avg_demo_sample_value_mse_loss = self.train_demo_sample_value_mse_loss_log.get_stat()
+            # avg_demo_sample_value_l1_loss = self.train_demo_sample_value_l1_loss_log.get_stat()
             
             avg_action_mse_loss = self.train_action_mse_loss.get_stat()
             avg_action_l1_loss = self.train_action_l1_loss.get_stat()
@@ -333,11 +333,11 @@ class WandbCallback(WandBCallbackImage):
             avg_world_model_sample_future_image_l1_loss = (
                 self.train_world_model_sample_future_image_l1_loss_log.get_stat()
             )
-            avg_world_model_sample_value_mse_loss = self.train_world_model_sample_value_mse_loss_log.get_stat()
-            avg_world_model_sample_value_l1_loss = self.train_world_model_sample_value_l1_loss_log.get_stat()
+            # avg_world_model_sample_value_mse_loss = self.train_world_model_sample_value_mse_loss_log.get_stat()
+            # avg_world_model_sample_value_l1_loss = self.train_world_model_sample_value_l1_loss_log.get_stat()
 
-            avg_value_function_sample_value_mse_loss = self.train_value_function_sample_value_mse_loss_log.get_stat()
-            avg_value_function_sample_value_l1_loss = self.train_value_function_sample_value_l1_loss_log.get_stat()
+            # avg_value_function_sample_value_mse_loss = self.train_value_function_sample_value_mse_loss_log.get_stat()
+            # avg_value_function_sample_value_l1_loss = self.train_value_function_sample_value_l1_loss_log.get_stat()
 
             dist.all_reduce(self.train_img_unstable_count, op=dist.ReduceOp.SUM)
             dist.all_reduce(self.train_video_unstable_count, op=dist.ReduceOp.SUM)
@@ -360,18 +360,18 @@ class WandbCallback(WandBCallbackImage):
                         f"train{self.wandb_extra_tag}/demo_sample_future_wrist_image_l1_loss": avg_future_wrist_image_l1_loss,
                         f"train{self.wandb_extra_tag}/demo_sample_future_image_mse_loss": avg_demo_sample_future_image_mse_loss,
                         f"train{self.wandb_extra_tag}/demo_sample_future_image_l1_loss": avg_demo_sample_future_image_l1_loss,
-                        f"train{self.wandb_extra_tag}/demo_sample_value_mse_loss": avg_demo_sample_value_mse_loss,
-                        f"train{self.wandb_extra_tag}/demo_sample_value_l1_loss": avg_demo_sample_value_l1_loss,
+                        # f"train{self.wandb_extra_tag}/demo_sample_value_mse_loss": avg_demo_sample_value_mse_loss,
+                        # f"train{self.wandb_extra_tag}/demo_sample_value_l1_loss": avg_demo_sample_value_l1_loss,
                         f"train{self.wandb_extra_tag}/world_model_sample_future_proprio_mse_loss": avg_world_model_sample_future_proprio_mse_loss,
                         f"train{self.wandb_extra_tag}/world_model_sample_future_proprio_l1_loss": avg_world_model_sample_future_proprio_l1_loss,
                         f"train{self.wandb_extra_tag}/world_model_sample_future_wrist_image_mse_loss": avg_world_model_sample_future_wrist_image_mse_loss,
                         f"train{self.wandb_extra_tag}/world_model_sample_future_wrist_image_l1_loss": avg_world_model_sample_future_wrist_image_l1_loss,
                         f"train{self.wandb_extra_tag}/world_model_sample_future_image_mse_loss": avg_world_model_sample_future_image_mse_loss,
                         f"train{self.wandb_extra_tag}/world_model_sample_future_image_l1_loss": avg_world_model_sample_future_image_l1_loss,
-                        f"train{self.wandb_extra_tag}/world_model_sample_value_mse_loss": avg_world_model_sample_value_mse_loss,
-                        f"train{self.wandb_extra_tag}/world_model_sample_value_l1_loss": avg_world_model_sample_value_l1_loss,
-                        f"train{self.wandb_extra_tag}/value_function_sample_value_mse_loss": avg_value_function_sample_value_mse_loss,
-                        f"train{self.wandb_extra_tag}/value_function_sample_value_l1_loss": avg_value_function_sample_value_l1_loss,
+                        # f"train{self.wandb_extra_tag}/world_model_sample_value_mse_loss": avg_world_model_sample_value_mse_loss,
+                        # f"train{self.wandb_extra_tag}/world_model_sample_value_l1_loss": avg_world_model_sample_value_l1_loss,
+                        # f"train{self.wandb_extra_tag}/value_function_sample_value_mse_loss": avg_value_function_sample_value_mse_loss,
+                        # f"train{self.wandb_extra_tag}/value_function_sample_value_l1_loss": avg_value_function_sample_value_l1_loss,
                         f"train{self.wandb_extra_tag}/train_img_unstable_count": self.train_img_unstable_count.item(),
                         f"train{self.wandb_extra_tag}/train_video_unstable_count": self.train_video_unstable_count.item(),
                         f"train{self.wandb_extra_tag}/train_action_mse_loss": avg_action_mse_loss,
@@ -480,14 +480,14 @@ class WandbCallback(WandBCallbackImage):
             if not torch.isnan(demo_sample_future_image_l1_loss):
                 self.val_demo_sample_future_image_l1_loss_log.loss += demo_sample_future_image_l1_loss
                 self.val_demo_sample_future_image_l1_loss_log.iter_count += 1
-            demo_sample_value_mse_loss = output_batch["demo_sample_value_mse_loss"].detach().float()
-            if not torch.isnan(demo_sample_value_mse_loss):
-                self.val_demo_sample_value_mse_loss_log.loss += demo_sample_value_mse_loss
-                self.val_demo_sample_value_mse_loss_log.iter_count += 1
-            demo_sample_value_l1_loss = output_batch["demo_sample_value_l1_loss"].detach().float()
-            if not torch.isnan(demo_sample_value_l1_loss):
-                self.val_demo_sample_value_l1_loss_log.loss += demo_sample_value_l1_loss
-                self.val_demo_sample_value_l1_loss_log.iter_count += 1
+            # demo_sample_value_mse_loss = output_batch["demo_sample_value_mse_loss"].detach().float()
+            # if not torch.isnan(demo_sample_value_mse_loss):
+            #     self.val_demo_sample_value_mse_loss_log.loss += demo_sample_value_mse_loss
+            #     self.val_demo_sample_value_mse_loss_log.iter_count += 1
+            # demo_sample_value_l1_loss = output_batch["demo_sample_value_l1_loss"].detach().float()
+            # if not torch.isnan(demo_sample_value_l1_loss):
+            #     self.val_demo_sample_value_l1_loss_log.loss += demo_sample_value_l1_loss
+            #     self.val_demo_sample_value_l1_loss_log.iter_count += 1
 
             world_model_sample_future_proprio_mse_loss = (
                 output_batch["world_model_sample_future_proprio_mse_loss"].detach().float()
@@ -531,23 +531,23 @@ class WandbCallback(WandBCallbackImage):
             if not torch.isnan(world_model_sample_future_image_l1_loss):
                 self.val_world_model_sample_future_image_l1_loss_log.loss += world_model_sample_future_image_l1_loss
                 self.val_world_model_sample_future_image_l1_loss_log.iter_count += 1
-            world_model_sample_value_mse_loss = output_batch["world_model_sample_value_mse_loss"].detach().float()
-            if not torch.isnan(world_model_sample_value_mse_loss):
-                self.val_world_model_sample_value_mse_loss_log.loss += world_model_sample_value_mse_loss
-                self.val_world_model_sample_value_mse_loss_log.iter_count += 1
-            world_model_sample_value_l1_loss = output_batch["world_model_sample_value_l1_loss"].detach().float()
-            if not torch.isnan(world_model_sample_value_l1_loss):
-                self.val_world_model_sample_value_l1_loss_log.loss += world_model_sample_value_l1_loss
-                self.val_world_model_sample_value_l1_loss_log.iter_count += 1
+            # world_model_sample_value_mse_loss = output_batch["world_model_sample_value_mse_loss"].detach().float()
+            # if not torch.isnan(world_model_sample_value_mse_loss):
+            #     self.val_world_model_sample_value_mse_loss_log.loss += world_model_sample_value_mse_loss
+            #     self.val_world_model_sample_value_mse_loss_log.iter_count += 1
+            # world_model_sample_value_l1_loss = output_batch["world_model_sample_value_l1_loss"].detach().float()
+            # if not torch.isnan(world_model_sample_value_l1_loss):
+            #     self.val_world_model_sample_value_l1_loss_log.loss += world_model_sample_value_l1_loss
+            #     self.val_world_model_sample_value_l1_loss_log.iter_count += 1
 
-            value_function_sample_value_mse_loss = output_batch["value_function_sample_value_mse_loss"].detach().float()
-            if not torch.isnan(value_function_sample_value_mse_loss):
-                self.val_value_function_sample_value_mse_loss_log.loss += value_function_sample_value_mse_loss
-                self.val_value_function_sample_value_mse_loss_log.iter_count += 1
-            value_function_sample_value_l1_loss = output_batch["value_function_sample_value_l1_loss"].detach().float()
-            if not torch.isnan(value_function_sample_value_l1_loss):
-                self.val_value_function_sample_value_l1_loss_log.loss += value_function_sample_value_l1_loss
-                self.val_value_function_sample_value_l1_loss_log.iter_count += 1
+            # value_function_sample_value_mse_loss = output_batch["value_function_sample_value_mse_loss"].detach().float()
+            # if not torch.isnan(value_function_sample_value_mse_loss):
+            #     self.val_value_function_sample_value_mse_loss_log.loss += value_function_sample_value_mse_loss
+            #     self.val_value_function_sample_value_mse_loss_log.iter_count += 1
+            # value_function_sample_value_l1_loss = output_batch["value_function_sample_value_l1_loss"].detach().float()
+            # if not torch.isnan(value_function_sample_value_l1_loss):
+            #     self.val_value_function_sample_value_l1_loss_log.loss += value_function_sample_value_l1_loss
+            #     self.val_value_function_sample_value_l1_loss_log.iter_count += 1
 
         else:
             if model.is_image_batch(data_batch):
@@ -570,8 +570,8 @@ class WandbCallback(WandBCallbackImage):
             avg_future_wrist_image_l1_loss = self.val_demo_sample_future_wrist_image_l1_loss_log.get_stat()
             avg_demo_sample_future_image_mse_loss = self.val_demo_sample_future_image_mse_loss_log.get_stat()
             avg_demo_sample_future_image_l1_loss = self.val_demo_sample_future_image_l1_loss_log.get_stat()
-            avg_demo_sample_value_mse_loss = self.val_demo_sample_value_mse_loss_log.get_stat()
-            avg_demo_sample_value_l1_loss = self.val_demo_sample_value_l1_loss_log.get_stat()
+            # avg_demo_sample_value_mse_loss = self.val_demo_sample_value_mse_loss_log.get_stat()
+            # avg_demo_sample_value_l1_loss = self.val_demo_sample_value_l1_loss_log.get_stat()
 
             avg_world_model_sample_future_proprio_mse_loss = (
                 self.val_world_model_sample_future_proprio_mse_loss_log.get_stat()
@@ -591,11 +591,11 @@ class WandbCallback(WandBCallbackImage):
             avg_world_model_sample_future_image_l1_loss = (
                 self.val_world_model_sample_future_image_l1_loss_log.get_stat()
             )
-            avg_world_model_sample_value_mse_loss = self.val_world_model_sample_value_mse_loss_log.get_stat()
-            avg_world_model_sample_value_l1_loss = self.val_world_model_sample_value_l1_loss_log.get_stat()
+            # avg_world_model_sample_value_mse_loss = self.val_world_model_sample_value_mse_loss_log.get_stat()
+            # avg_world_model_sample_value_l1_loss = self.val_world_model_sample_value_l1_loss_log.get_stat()
 
-            avg_value_function_sample_value_mse_loss = self.val_value_function_sample_value_mse_loss_log.get_stat()
-            avg_value_function_sample_value_l1_loss = self.val_value_function_sample_value_l1_loss_log.get_stat()
+            # avg_value_function_sample_value_mse_loss = self.val_value_function_sample_value_mse_loss_log.get_stat()
+            # avg_value_function_sample_value_l1_loss = self.val_value_function_sample_value_l1_loss_log.get_stat()
 
             dist.all_reduce(self.val_img_unstable_count, op=dist.ReduceOp.SUM)
             dist.all_reduce(self.val_video_unstable_count, op=dist.ReduceOp.SUM)
@@ -618,18 +618,18 @@ class WandbCallback(WandBCallbackImage):
                         f"val{self.wandb_extra_tag}/demo_sample_future_wrist_image_l1_loss": avg_future_wrist_image_l1_loss,
                         f"val{self.wandb_extra_tag}/demo_sample_future_image_mse_loss": avg_demo_sample_future_image_mse_loss,
                         f"val{self.wandb_extra_tag}/demo_sample_future_image_l1_loss": avg_demo_sample_future_image_l1_loss,
-                        f"val{self.wandb_extra_tag}/demo_sample_value_mse_loss": avg_demo_sample_value_mse_loss,
-                        f"val{self.wandb_extra_tag}/demo_sample_value_l1_loss": avg_demo_sample_value_l1_loss,
+                        # f"val{self.wandb_extra_tag}/demo_sample_value_mse_loss": avg_demo_sample_value_mse_loss,
+                        # f"val{self.wandb_extra_tag}/demo_sample_value_l1_loss": avg_demo_sample_value_l1_loss,
                         f"val{self.wandb_extra_tag}/world_model_sample_future_proprio_mse_loss": avg_world_model_sample_future_proprio_mse_loss,
                         f"val{self.wandb_extra_tag}/world_model_sample_future_proprio_l1_loss": avg_world_model_sample_future_proprio_l1_loss,
                         f"val{self.wandb_extra_tag}/world_model_sample_future_wrist_image_mse_loss": avg_world_model_sample_future_wrist_image_mse_loss,
                         f"val{self.wandb_extra_tag}/world_model_sample_future_wrist_image_l1_loss": avg_world_model_sample_future_wrist_image_l1_loss,
                         f"val{self.wandb_extra_tag}/world_model_sample_future_image_mse_loss": avg_world_model_sample_future_image_mse_loss,
                         f"val{self.wandb_extra_tag}/world_model_sample_future_image_l1_loss": avg_world_model_sample_future_image_l1_loss,
-                        f"val{self.wandb_extra_tag}/world_model_sample_value_mse_loss": avg_world_model_sample_value_mse_loss,
-                        f"val{self.wandb_extra_tag}/world_model_sample_value_l1_loss": avg_world_model_sample_value_l1_loss,
-                        f"val{self.wandb_extra_tag}/value_function_sample_value_mse_loss": avg_value_function_sample_value_mse_loss,
-                        f"val{self.wandb_extra_tag}/value_function_sample_value_l1_loss": avg_value_function_sample_value_l1_loss,
+                        # f"val{self.wandb_extra_tag}/world_model_sample_value_mse_loss": avg_world_model_sample_value_mse_loss,
+                        # f"val{self.wandb_extra_tag}/world_model_sample_value_l1_loss": avg_world_model_sample_value_l1_loss,
+                        # f"val{self.wandb_extra_tag}/value_function_sample_value_mse_loss": avg_value_function_sample_value_mse_loss,
+                        # f"val{self.wandb_extra_tag}/value_function_sample_value_l1_loss": avg_value_function_sample_value_l1_loss,
                         f"val{self.wandb_extra_tag}/val_img_unstable_count": self.val_img_unstable_count.item(),
                         f"val{self.wandb_extra_tag}/val_video_unstable_count": self.val_video_unstable_count.item(),
                     }

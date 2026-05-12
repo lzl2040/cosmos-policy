@@ -395,6 +395,7 @@ class CosmosPolicyVideo2WorldModel(CosmosPolicyDiffusionModel):
         self,
         xt_B_C_T_H_W: torch.Tensor,
         sigma: torch.Tensor,
+        action_sigma_B: torch.Tensor,
         condition: Text2WorldCondition,
         action_latent: Optional[torch.Tensor] = None,
         num_action_tokens: int = 4,
@@ -427,8 +428,12 @@ class CosmosPolicyVideo2WorldModel(CosmosPolicyDiffusionModel):
         sigma_B_1_T_1_1 = rearrange(sigma_B_T, "b t -> b 1 t 1 1")
         # get precondition for the network
         c_skip_B_1_T_1_1, c_out_B_1_T_1_1, c_in_B_1_T_1_1, c_noise_B_1_T_1_1 = self.scaling(sigma=sigma_B_1_T_1_1)
+        action_c_skip_B_T, action_c_out_B_T, action_c_in_B_T, action_c_noise_B_T = self.scaling(sigma=action_sigma_B)
 
         net_state_in_B_C_T_H_W = xt_B_C_T_H_W * c_in_B_1_T_1_1
+        # print(action_latent.shape, action_c_in_B_T.shape, sigma_B_1_T_1_1.shape) # 6 4 768, (6, 1)
+        action_latent = action_latent * action_c_in_B_T.unsqueeze(-1)
+        action_latent = action_latent.to(**self.tensor_kwargs)
 
         if condition.is_video:
             condition_state_in_B_C_T_H_W = condition.gt_frames.type_as(net_state_in_B_C_T_H_W) / self.config.sigma_data
@@ -457,6 +462,7 @@ class CosmosPolicyVideo2WorldModel(CosmosPolicyDiffusionModel):
             )
 
         # forward pass through the network with optional action latent
+        # print(action_latent.shape) if action_latent is not None else print("No action latent provided")
         net_output = self.net(
             x_B_C_T_H_W=net_state_in_B_C_T_H_W.to(
                 **self.tensor_kwargs
@@ -467,9 +473,9 @@ class CosmosPolicyVideo2WorldModel(CosmosPolicyDiffusionModel):
                     "dtype": torch.float32 if self.config.use_wan_fp32_strategy else self.tensor_kwargs["dtype"],
                 },
             ),  # Eq. 7 of https://arxiv.org/pdf/2206.00364.pdf
+            action_latent=action_latent,
+            num_action_tokens=num_action_tokens,
             **condition.to_dict(),
-            # action_latent=action_latent,
-            # num_action_tokens=num_action_tokens,
         )
         
         # Handle different return types from network
@@ -482,6 +488,18 @@ class CosmosPolicyVideo2WorldModel(CosmosPolicyDiffusionModel):
             net_output_B_C_T_H_W = net_output.float()
 
         x0_pred_B_C_T_H_W = c_skip_B_1_T_1_1 * xt_B_C_T_H_W + c_out_B_1_T_1_1 * net_output_B_C_T_H_W
+        
+        # Apply scaling to action_output (same as image latent)
+        # action_x0_pred = c_skip * action_latent + c_out * network_output
+        if action_output is not None and action_latent is not None:
+            # action_c_skip_B_T: [B, T] -> [B, 1] for action tokens (single noise level per sample)
+            # action_c_out_B_T: [B, T] -> [B, 1] for action tokens
+            action_c_skip = action_c_skip_B_T[:, :1]  # [B, 1]
+            action_c_out = action_c_out_B_T[:, :1]    # [B, 1]
+            # action_output: [B, num_action_tokens, hidden_dim]
+            # action_latent: [B, num_action_tokens, hidden_dim]
+            action_output = action_c_skip.unsqueeze(-1) * action_latent + action_c_out.unsqueeze(-1) * action_output
+        
         if condition.is_video and self.config.denoise_replace_gt_frames:
             # Set the first few frames to the ground truth frames. This will ensure that the loss is not computed for the first few frames.
             x0_pred_B_C_T_H_W = condition.gt_frames.type_as(

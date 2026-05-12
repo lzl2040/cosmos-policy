@@ -1384,6 +1384,7 @@ class Block(nn.Module):
             scale_mlp_B_T_1_1_D,
             shift_mlp_B_T_1_1_D,
         )
+        # print(f"normalized_x shape before MLP {normalized_x_B_T_H_W_D.shape}") # 8 6 14 14 2048
         result_B_T_H_W_D = self.mlp(normalized_x_B_T_H_W_D)
         x_B_T_H_W_D = x_B_T_H_W_D + gate_mlp_B_T_1_1_D * result_B_T_H_W_D
         return x_B_T_H_W_D
@@ -1494,7 +1495,7 @@ class MiniTrainDIT(WeightTrainingStat):
         # if True, will closely match wan's strategy to use fp32 in certain layers/operations
         use_wan_fp32_strategy: bool = False,
         # action latent settings
-        action_dim: Optional[int] = None,
+        action_dim: Optional[int] = 768,
     ) -> None:
         super().__init__()
         self.max_img_h = max_img_h
@@ -1589,11 +1590,13 @@ class MiniTrainDIT(WeightTrainingStat):
         
         # Action latent settings
         self.action_dim = action_dim
-        if action_dim is not None:
-            # Action projection layer: project action latent to same dim as image latent
-            self.action_proj = nn.Linear(action_dim, model_channels, bias=False)
-            # Action position embedding (learnable)
-            self.action_pos_embed = nn.Parameter(torch.zeros(1, model_channels))  # for action tokens
+        # self.action_proj = nn.Linear(action_dim, model_channels, bias=False)
+        self.action_pos_embed = nn.Parameter(torch.zeros(1, model_channels))
+        # if action_dim is not None:
+        #     # Action projection layer: project action latent to same dim as image latent
+        #     self.action_proj = nn.Linear(action_dim, model_channels, bias=False)
+        #     # Action position embedding (learnable)
+        #     self.action_pos_embed = nn.Parameter(torch.zeros(1, model_channels))  # for action tokens
 
     def init_weights(self):
         self.x_embedder.init_weights()
@@ -1752,7 +1755,6 @@ class MiniTrainDIT(WeightTrainingStat):
         assert isinstance(data_type, DataType), (
             f"Expected DataType, got {type(data_type)}. We need discuss this flag later."
         )
-        # print(x_B_C_T_H_W.shape)
         # rope_emb_L_1_1_D is None
         x_B_T_H_W_D, rope_emb_L_1_1_D, extra_pos_emb_B_T_H_W_D_or_T_H_W_B_D = self.prepare_embedded_sequence(
             x_B_C_T_H_W,
@@ -1796,12 +1798,16 @@ class MiniTrainDIT(WeightTrainingStat):
         B, T, H, W, D = x_B_T_H_W_D.shape
         
         # Handle action latent concatenation if provided
-        if action_latent is not None and self.action_dim is not None:
+        # print(action_latent, num_action_tokens)
+        # print(action_latent.shape if action_latent is not None else "No action latent provided")
+        action_dim = None
+        if action_latent is not None:
+            # # print("Action latent provided, concatenating with image tokens", self.model_channels)
             # Project action latent to model dimension
             # action_latent: (B, num_action_tokens, action_dim)
-            action_B_N_D = self.action_proj(action_latent)  # (B, num_action_tokens, model_channels)
+            # action_B_N_D = self.action_proj(action_latent)  # (B, num_action_tokens, model_channels)
             # Add position embedding for action tokens
-            action_B_N_D = action_B_N_D + self.action_pos_embed  # broadcast position embed
+            action_B_N_D = action_latent + self.action_pos_embed  # broadcast position embed
             
             # Reshape image latent for concatenation
             x_B_THW_D = rearrange(x_B_T_H_W_D, "b t h w d -> b (t h w) d")  # (B, T*H*W, D)
@@ -1897,13 +1903,13 @@ class MiniTrainDIT(WeightTrainingStat):
                 normalized_x = block.layer_norm_self_attn(x_B_THWplusA_D) * (1 + scale_self_attn_full) + shift_self_attn_full
                 # For self-attention with action tokens, we use full attention (no RoPE for action tokens)
                 # Split into image and action parts for attention
-                normalized_img = normalized_x[:, :num_img_tokens]
-                normalized_action = normalized_x[:, num_img_tokens:]
+                # normalized_img = normalized_x[:, :num_img_tokens]
+                # normalized_action = normalized_x[:, num_img_tokens:]
                 
                 # Process image tokens with RoPE
-                video_size = VideoSize(T=T, H=H, W=W)
-                if block.cp_size is not None and block.cp_size > 1:
-                    video_size = VideoSize(T=T * block.cp_size, H=H, W=W)
+                # video_size = VideoSize(T=T, H=H, W=W)
+                # if block.cp_size is not None and block.cp_size > 1:
+                #     video_size = VideoSize(T=T * block.cp_size, H=H, W=W)
                 
                 # result_img = block.self_attn(
                 #     normalized_img,
@@ -1919,6 +1925,8 @@ class MiniTrainDIT(WeightTrainingStat):
                     None,
                     rope_emb=None,  # No RoPE for mixed tokens
                 )
+                # [8, 1180, 2048]
+                # print(f"Block {i}: result_full shape {result_full.shape}, {num_img_tokens} image tokens, {num_action_tokens} action tokens")
                 result_img = result_full[:, :num_img_tokens]
                 result_action = result_full[:, num_img_tokens:]
                 
@@ -1931,6 +1939,7 @@ class MiniTrainDIT(WeightTrainingStat):
                 
                 # MLP
                 normalized_x = block.layer_norm_mlp(x_B_THWplusA_D) * (1 + scale_mlp_full) + shift_mlp_full
+                # print(f"Block {i}: normalized_x shape before MLP {normalized_x.shape}, {num_img_tokens} image tokens, {num_action_tokens} action tokens")
                 result_full = block.mlp(normalized_x)
                 x_B_THWplusA_D = x_B_THWplusA_D + gate_mlp_full * result_full
                 
@@ -1957,10 +1966,10 @@ class MiniTrainDIT(WeightTrainingStat):
                     )
                 return x_B_C_Tt_Hp_Wp, intermediate_features_outputs, action_output
             
-            return x_B_C_Tt_Hp_Wp
+            # return x_B_C_Tt_Hp_Wp
+            return x_B_C_Tt_Hp_Wp, intermediate_features_outputs, action_output
         
         # Original processing without action latent
-        # x_B_THW_D = rearrange(x_B_T_H_W_D, "b t h w d -> b (t h w) d")
 
         intermediate_features_outputs = []
         for i, block in enumerate(self.blocks):

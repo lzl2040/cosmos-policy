@@ -397,6 +397,7 @@ class CosmosPolicyDiffusionModel(BaseDiffusionModel):
             value_function_sample_mask=data_batch["value_function_sample_mask"],
             value_function_return=data_batch["value_function_return"],
             value_indices=data_batch["value_latent_idx"],
+            gripper_index=data_batch["gripper_index"],
         )
 
         # print(self.loss_reduce)
@@ -431,6 +432,7 @@ class CosmosPolicyDiffusionModel(BaseDiffusionModel):
         value_function_sample_mask: torch.Tensor,
         value_function_return: torch.Tensor,
         value_indices: torch.Tensor,
+        gripper_index: torch.Tensor,
     ):
         """
         NOTE (user): Modified to add action chunk prediction and future image prediction + action chunk loss logging.
@@ -481,6 +483,7 @@ class CosmosPolicyDiffusionModel(BaseDiffusionModel):
         batch_indices = torch.arange(x0_B_C_T_H_W.shape[0], device=x0_B_C_T_H_W.device)
         C_latent, H_latent, W_latent = x0_B_C_T_H_W.shape[1], x0_B_C_T_H_W.shape[3], x0_B_C_T_H_W.shape[4]
         
+        # print(gripper_index)
         # Prepare action embeddings (encode action chunk)
         # action_chunk: [B, chunk_size, action_dim]
         with torch.no_grad():
@@ -539,7 +542,7 @@ class CosmosPolicyDiffusionModel(BaseDiffusionModel):
         # action_output: [B, num_action_tokens, hidden_dim] -> decode to action space
         if action_output is not None:
             pred_action = self.action_decoder(action_output)  # [B, num_action_tokens, action_dim * group_size]
-            pred_action = pred_action.view(pred_action.shape[0], pred_action.shape[1], self.action_group_size,[] -1) 
+            pred_action = pred_action.view(pred_action.shape[0], pred_action.shape[1], self.action_group_size, -1) 
             pred_action = pred_action.view(pred_action.shape[0], -1, pred_action.shape[-1])  # [B, chunk_size, action_dim]
             kendall_loss_action_mse_loss = ((pred_action - action_chunk) ** 2).mean()
             kendall_loss_action_l1_loss = torch.abs(pred_action - action_chunk).mean()

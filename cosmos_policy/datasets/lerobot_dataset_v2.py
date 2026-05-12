@@ -1498,34 +1498,6 @@ class MultiDatasetforDistTraining(torch.utils.data.Dataset):
         return dataset[int(single_step_index)]
     
     def prepare_action_state(self, item):
-        if "game" in item["dataset_name"]:
-            item["action"] = F.pad(
-                    item["action"],
-                    (44 + 6, 0),   # 对最后一维：左 pad 44个0，右 pad 0个0
-                    mode="constant",
-                    value=0
-                )
-            item["observation.state"] = F.pad(
-                    item["observation.state"],
-                    (46 + 6, 0),   # 对最后一维：左 pad 46个0，右 pad 0个0
-                    mode="constant",
-                    value=0
-                )
-        if "rh20t" in item["dataset_name"]:
-            chunk_len = item["action"].shape[0]
-            new_action = torch.ones((chunk_len, self.max_action_dim))
-            new_action[:, :6] = item["action"][:, :6]
-            new_action[:, 6:6 + 1] = item["action"][:, -2:-1]
-            # force data
-            new_action[:, 44:44 + 6] = item["action"][:, 6:6 + 6]
-            new_state = torch.ones((chunk_len, self.max_state_dim))
-            new_state[:, :7] = item["observation.state"][:, :7]
-            new_state[:, 7:7 + 1] = item["observation.state"][:, -2:-1]
-            # force data
-            new_state[:, 46:46 + 6] = item["observation.state"][:, 7:7 + 6]
-            item["action"] = new_action
-            item["observation.state"] = new_state
-        
         item["action"] = self.pad_vector(item["action"], self.max_action_dim)
         item["observation.state"] = self.pad_vector(item["observation.state"], self.max_state_dim)
         return item
@@ -1547,16 +1519,6 @@ class MultiDatasetforDistTraining(torch.utils.data.Dataset):
         if "agi" in item['dataset_name']:
             action_end_dim = 14
             state_end_dim = 16
-        elif "ego_dex" in item['dataset_name']:
-            action_start_dim = 0
-            action_end_dim = 14 + 30
-            state_start_dim = 0
-            state_end_dim = 16 + 30
-        elif "game" in item["dataset_name"]:
-            action_start_dim = 14 + 30
-            action_end_dim = 14 + 30 + 50
-            state_start_dim = 16 + 30
-            state_end_dim = 16 + 30 + 50
         else:
             action_end_dim = 7
             state_end_dim = 8
@@ -1601,44 +1563,6 @@ class MultiDatasetforDistTraining(torch.utils.data.Dataset):
         
         item["action"] = (item["action"] - action_mean) / (action_std + 1e-8)
         item["observation.state"] = (item["observation.state"] - state_mean)    / (state_std + 1e-8)
-        
-        # action = item["action"].clone()
-        # state = item["observation.state"].clone()
-
-        # # ===== action =====
-        # action_mean = self.stats["action"][key_mean][xyz_dims].to(
-        #     device=action.device, dtype=action.dtype
-        # )
-        # action_std = self.stats["action"][key_std][xyz_dims].to(
-        #     device=action.device, dtype=action.dtype
-        # )
-
-        # action_std = torch.where(
-        #     action_std == 0,
-        #     torch.tensor(1e-8, device=action.device, dtype=action.dtype),
-        #     action_std
-        # )
-
-        # action[..., xyz_dims] = (action[..., xyz_dims] - action_mean) / action_std
-
-        # # ===== state =====
-        # state_mean = self.stats["observation.state"][key_mean][xyz_dims].to(
-        #     device=state.device, dtype=state.dtype
-        # )
-        # state_std = self.stats["observation.state"][key_std][xyz_dims].to(
-        #     device=state.device, dtype=state.dtype
-        # )
-
-        # state_std = torch.where(
-        #     state_std == 0,
-        #     torch.tensor(1e-8, device=state.device, dtype=state.dtype),
-        #     state_std
-        # )
-
-        # state[..., xyz_dims] = (state[..., xyz_dims] - state_mean) / state_std
-
-        # item["action"] = action
-        # item["observation.state"] = state
         return item
     
     def norm_data_with_min_max_ort6d(self, item):
@@ -1708,6 +1632,12 @@ class MultiDatasetforDistTraining(torch.utils.data.Dataset):
             # task_embeddings = torch.squeeze(torch.zeros((1, 512, 1024)))
         else:
             task_embeddings = torch.squeeze(self.t5_text_embeddings[item["task"]])
+        
+        action_dim = item["action"].shape[-1]
+        if action_dim > 10:
+            gripper_index = [action_dim // 2 - 1, action_dim - 1]
+        else:
+            gripper_index = [action_dim - 1, action_dim - 1]
         
         # prepare state and action
         item = self.prepare_action_state(item)
@@ -1868,6 +1798,7 @@ class MultiDatasetforDistTraining(torch.utils.data.Dataset):
             "future_image2_latent_idx": future_image2_latent_idx if self.use_third_person_images else -1,
             "value_function_return": float("-100"),
             "sample_rate": sample_rate,
+            "gripper_index": gripper_index,
             # "next_action_chunk": next_action_chunk,
             # "next_value_function_return": next_value_function_return,
         }

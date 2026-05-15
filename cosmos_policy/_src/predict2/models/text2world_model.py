@@ -170,8 +170,8 @@ class DiffusionModel(ImaginaireModel):
         # vision_model_name: str = "/mnt/wangxiaofa/pt_weights/siglip2-base-patch16-224/"
         
         # for b200
-        ace_pt_path = "/mnt/pvc/training_data/weights/pt_ace/step_26k/mp_rank_00_model_states.pt"
-        vision_model_name: str = "/mnt/pvc/training_data/weights/siglip2-base-patch16-224/"
+        ace_pt_path = "/mnt/pvc/msra-training_data/weights/pt_ace/step_26k/mp_rank_00_model_states.pt"
+        vision_model_name: str = "/mnt/pvc/msra-training_data/weights/siglip2-base-patch16-224/"
         
         
         self.ace = ACE(vision_model_name=vision_model_name).to(self.precision)
@@ -180,17 +180,6 @@ class DiffusionModel(ImaginaireModel):
         print("missing_keys:", missing_keys)
         print("unexpected_keys:", unexpected_keys)
         print(f"Load ace weights from:{ace_pt_path}")
-
-        # 3. tokenizer
-        # with misc.timer("DiffusionModel: set_up_tokenizer"):
-        #     # self.tokenizer: BaseVAE = lazy_instantiate(config.tokenizer)
-        #     # assert self.tokenizer.latent_ch == self.config.state_ch, (
-        #     #     f"latent_ch {self.tokenizer.latent_ch} != state_shape {self.config.state_ch}"
-        #     # )
-        #     vision_model_name: str = "/home/cosmos/.cache/siglip2-base-patch16-224"
-        #     # vision_model_name: str = "/mnt/wangxiaofa/pt_weights/siglip2-base-patch16-224"
-        #     self.tokenizer = VisionEncoder(model_name=vision_model_name)
-            
 
         # 4. Set up loss options, including loss masking, loss reduce and loss scaling
         self.loss_reduce = getattr(config, "loss_reduce", "mean")

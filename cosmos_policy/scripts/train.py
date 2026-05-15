@@ -35,6 +35,7 @@ from cosmos_policy._src.imaginaire.utils import distributed
 from cosmos_policy._src.imaginaire.utils.context_managers import data_loader_init, distributed_init, model_init
 from cosmos_policy._src.imaginaire.utils.launch import log_reproducible_setup
 
+import torch
 
 @logging.catch(reraise=True)
 def launch(config: Config, args: argparse.Namespace) -> None:
@@ -56,6 +57,12 @@ def launch(config: Config, args: argparse.Namespace) -> None:
 
     with model_init():
         model = instantiate(config.model)
+    
+    # pt_weight_path = "/home/cosmos/.cache/cosmos_policy/our_model/model.pt"
+    pt_weight_path = "/mnt/wangxiaofa/cosmos_policy_exp/cosmos_policy/cosmos_v2_finetune/0509_cosmos_policy_pretrain_lerobot_v21_ort6d/checkpoints/iter_20k.pt"
+    state_dict = torch.load(pt_weight_path)
+    model.load_state_dict(state_dict)
+    print(f"Successfully loaded model weights from {pt_weight_path}")
 
     # Create the dataloaders.
     with data_loader_init():

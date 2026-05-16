@@ -62,6 +62,8 @@ def launch(config: Config, args: argparse.Namespace) -> None:
     with model_init():
         model = instantiate(config.model)
 
+    dcp_path = "/mnt/pvc/msra-training_data/cosmos_policy_exp/cosmos_policy/cosmos_v2_finetune/0510-world-stage1-pt/checkpoints/iter_000011000"
+    
     # Create the dataloaders.
     with data_loader_init():
         # NOTE (user): We manually instantiate the dataloader instead of using instantiate(config.dataloader_train),
@@ -118,6 +120,7 @@ def launch(config: Config, args: argparse.Namespace) -> None:
         model,
         dataloader_train,
         dataloader_val,
+        pretrained_path=dcp_path
     )
 
 

@@ -50,6 +50,7 @@ class CosmosPolicyTrainer(ImaginaireTrainer):
         model: ImaginaireModel,
         dataloader_train: torch.utils.data.DataLoader,
         dataloader_val: torch.utils.data.DataLoader,
+        pretrained_path: str = None,
     ) -> None:
         """The training function.
 
@@ -68,6 +69,9 @@ class CosmosPolicyTrainer(ImaginaireTrainer):
         grad_scaler = torch.amp.GradScaler("cuda", **self.config.trainer.grad_scaler_args)
         self.callbacks.on_optimizer_init_end()
         # Load the model checkpoint and get the starting iteration number.
+        if pretrained_path is not None:
+            self.checkpointer.load_with_file(model, optimizer, scheduler, grad_scaler, checkpoint_path=pretrained_path)
+            log.critical(f"Loading pretrained weights from {pretrained_path}...")
         iteration = self.checkpointer.load(model, optimizer, scheduler, grad_scaler)
         grad_accum_iter = 0
         log.critical(f"Distributed parallelism mode: {self.config.trainer.distributed_parallelism}")

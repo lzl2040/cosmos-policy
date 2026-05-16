@@ -58,8 +58,8 @@ def launch(config: Config, args: argparse.Namespace) -> None:
     with model_init():
         model = instantiate(config.model)
     
-    pt_weight_path = "/home/cosmos/.cache/cosmos_policy/our_model/model.pt"
-    # pt_weight_path = "/mnt/wangxiaofa/cosmos_policy_exp/cosmos_policy/cosmos_v2_finetune/0509_cosmos_policy_pretrain_lerobot_v21_ort6d/checkpoints/iter_20k.pt"
+    # pt_weight_path = "/home/cosmos/.cache/cosmos_policy/our_model/model.pt"
+    pt_weight_path = "/mnt/wangxiaofa/cosmos_policy_exp/cosmos_policy/cosmos_v2_finetune/0509_cosmos_policy_pretrain_lerobot_v21_ort6d/checkpoints/iter_20k.pt"
     state_dict = torch.load(pt_weight_path, map_location="cpu")
     model.load_state_dict(state_dict, strict=True)
     print(f"Successfully loaded model weights from {pt_weight_path}")

@@ -58,69 +58,68 @@ def launch(config: Config, args: argparse.Namespace) -> None:
     with model_init():
         model = instantiate(config.model)
     
-    # pt_weight_path = "/home/cosmos/.cache/cosmos_policy/our_model/model.pt"
-    pt_weight_path = "/mnt/wangxiaofa/cosmos_policy_exp/cosmos_policy/cosmos_v2_finetune/0509_cosmos_policy_pretrain_lerobot_v21_ort6d/checkpoints/iter_20k.pt"
-    state_dict = torch.load(pt_weight_path, map_location="cpu")
-    model.load_state_dict(state_dict, strict=True)
-    print(f"Successfully loaded model weights from {pt_weight_path}")
-
+    # dcp_path = "/home/cosmos/.cache/cosmos_policy/our_model/iter_000020000"
+    # dcp_path = "/home/cosmos/.cache/imaginaire_output/cosmos_policy/cosmos_v2_finetune/debug/checkpoints/iter_000003000"
+    dcp_path = "/mnt/wangxiaofa/cosmos_policy_exp/cosmos_policy/cosmos_v2_finetune/0509_cosmos_policy_pretrain_lerobot_v21_ort6d/checkpoints/iter_000020000"
+    
     # Create the dataloaders.
-    # with data_loader_init():
-    #     # NOTE (user): We manually instantiate the dataloader instead of using instantiate(config.dataloader_train),
-    #     # since it is difficult to set up the DistributedSampler without creating two duplicates of the dataset.
-    #     # We intentionally instantiate the dataloader on every process (rather than the rank 0 process only) to work with the DistributedSampler.
-    #     dataset = instantiate(config.dataloader_train.dataset)
-    #     sampler = DistributedSampler(
-    #         dataset=dataset,
-    #         num_replicas=parallel_state.get_data_parallel_world_size(),
-    #         rank=parallel_state.get_data_parallel_rank(),
-    #         shuffle=True,
-    #         seed=0,
-    #     )
-    #     dataloader_train = DataLoader(
-    #         dataset=dataset,
-    #         sampler=sampler,
-    #         batch_size=config.dataloader_train.batch_size,
-    #         drop_last=config.dataloader_train.drop_last,
-    #         num_workers=4,
-    #         pin_memory=False,
-    #         persistent_workers=False
-    #         # num_workers=config.dataloader_train.num_workers,
-    #         # persistent_workers=config.dataloader_train.persistent_workers,
-    #         # pin_memory=config.dataloader_train.pin_memory,
-    #         # pin_memory_device=config.dataloader_train.pin_memory_device,
-    #         # timeout=config.dataloader_train.timeout,
-    #     )
+    with data_loader_init():
+        # NOTE (user): We manually instantiate the dataloader instead of using instantiate(config.dataloader_train),
+        # since it is difficult to set up the DistributedSampler without creating two duplicates of the dataset.
+        # We intentionally instantiate the dataloader on every process (rather than the rank 0 process only) to work with the DistributedSampler.
+        dataset = instantiate(config.dataloader_train.dataset)
+        sampler = DistributedSampler(
+            dataset=dataset,
+            num_replicas=parallel_state.get_data_parallel_world_size(),
+            rank=parallel_state.get_data_parallel_rank(),
+            shuffle=True,
+            seed=0,
+        )
+        dataloader_train = DataLoader(
+            dataset=dataset,
+            sampler=sampler,
+            batch_size=config.dataloader_train.batch_size,
+            drop_last=config.dataloader_train.drop_last,
+            num_workers=4,
+            pin_memory=False,
+            persistent_workers=False
+            # num_workers=config.dataloader_train.num_workers,
+            # persistent_workers=config.dataloader_train.persistent_workers,
+            # pin_memory=config.dataloader_train.pin_memory,
+            # pin_memory_device=config.dataloader_train.pin_memory_device,
+            # timeout=config.dataloader_train.timeout,
+        )
 
-    #     dataloader_val = None
-    #     if config.trainer.run_validation:
-    #         # NOTE (user): Manually instantiate the val dataloader as well
-    #         dataset_val = instantiate(config.dataloader_val.dataset)
-    #         sampler_val = DistributedSampler(
-    #             dataset=dataset_val,
-    #             num_replicas=parallel_state.get_data_parallel_world_size(),
-    #             rank=parallel_state.get_data_parallel_rank(),
-    #             shuffle=False,  # Do not shuffle the validation set
-    #             seed=0,
-    #         )
-    #         dataloader_val = DataLoader(
-    #             dataset=dataset_val,
-    #             sampler=sampler_val,
-    #             batch_size=config.dataloader_val.batch_size,
-    #             drop_last=config.dataloader_val.drop_last,
-    #             num_workers=config.dataloader_val.num_workers,
-    #             persistent_workers=config.dataloader_val.persistent_workers,
-    #             pin_memory=config.dataloader_val.pin_memory,
-    #             pin_memory_device=config.dataloader_val.pin_memory_device,
-    #             timeout=config.dataloader_val.timeout,
-    #         )
+        dataloader_val = None
+        if config.trainer.run_validation:
+            # NOTE (user): Manually instantiate the val dataloader as well
+            dataset_val = instantiate(config.dataloader_val.dataset)
+            sampler_val = DistributedSampler(
+                dataset=dataset_val,
+                num_replicas=parallel_state.get_data_parallel_world_size(),
+                rank=parallel_state.get_data_parallel_rank(),
+                shuffle=False,  # Do not shuffle the validation set
+                seed=0,
+            )
+            dataloader_val = DataLoader(
+                dataset=dataset_val,
+                sampler=sampler_val,
+                batch_size=config.dataloader_val.batch_size,
+                drop_last=config.dataloader_val.drop_last,
+                num_workers=config.dataloader_val.num_workers,
+                persistent_workers=config.dataloader_val.persistent_workers,
+                pin_memory=config.dataloader_val.pin_memory,
+                pin_memory_device=config.dataloader_val.pin_memory_device,
+                timeout=config.dataloader_val.timeout,
+            )
 
-    # # Start training
-    # trainer.train(
-    #     model,
-    #     dataloader_train,
-    #     dataloader_val,
-    # )
+    # Start training
+    trainer.train(
+        model,
+        dataloader_train,
+        dataloader_val,
+        dcp_path,
+    )
 
 
 if __name__ == "__main__":

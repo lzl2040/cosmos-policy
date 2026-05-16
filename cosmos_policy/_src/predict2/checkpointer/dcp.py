@@ -480,8 +480,9 @@ class DistributedCheckpointer(AbstractCheckpointer):
             self.staging_ckpt_file = None
             self.staging_stream = torch.cuda.Stream()
 
-    def keys_to_resume_during_load(self) -> Tuple[Set, Union[str, None]]:
-        latest_checkpoint_file = self._read_latest_checkpoint_file()
+    def keys_to_resume_during_load(self, latest_checkpoint_file: Optional[str] = None) -> Tuple[Set, Union[str, None]]:
+        if latest_checkpoint_file is None:
+            latest_checkpoint_file = self._read_latest_checkpoint_file()
 
         resume_keys = []
 
@@ -536,6 +537,87 @@ class DistributedCheckpointer(AbstractCheckpointer):
             self.callbacks.on_load_checkpoint_start(model)
 
         resume_keys, checkpoint_path = self.keys_to_resume_during_load()
+        resume_keys = sorted(resume_keys)
+        log.critical(f"Resuming ckpt {checkpoint_path} with keys: {resume_keys}")
+
+        iteration = 0
+
+        if checkpoint_path is not None:
+            self._check_checkpoint_exists(checkpoint_path)
+            for key in resume_keys:
+                load_planner = DefaultLoadPlanner(allow_partial_load=True)
+                if hasattr(load_planner, "set_partial_channel_weight"):
+                    log.critical(f"set_partial_channel_weight: {self.config_checkpoint.dcp_allow_mismatched_size}")
+                    load_planner.set_partial_channel_weight(self.config_checkpoint.dcp_allow_mismatched_size)
+                cur_key_ckpt_full_path = os.path.join(checkpoint_path, key)
+                log.critical(f"Start loading checkpoint from {checkpoint_path}")
+                storage_reader = self.get_storage_reader(cur_key_ckpt_full_path)
+                torch.distributed.barrier()
+                log.critical(f"starting {cur_key_ckpt_full_path}", rank0_only=False)
+                if key == "model":
+                    log.info("- Loading the model...")
+                    _model_wrapper = ModelWrapper(model)
+                    _state_dict = _model_wrapper.state_dict()
+
+                    dcp_load_state_dict(_state_dict, storage_reader, load_planner)
+                    _model_wrapper.load_state_dict(_state_dict)
+                elif key == "optim":
+                    log.info("- Loading the optimizer...")
+                    _optim_wrapper = OptimizerWrapper(model, optimizer)
+                    _state_dict = _optim_wrapper.state_dict()
+                    dcp.load(
+                        _state_dict,
+                        storage_reader=storage_reader,
+                        planner=load_planner,
+                    )
+                    _optim_wrapper.load_state_dict(_state_dict)
+                elif key == "scheduler":
+                    log.info("- Loading the scheduler...")
+                    _state_dict = scheduler.state_dict()
+                    dcp.load(
+                        _state_dict,
+                        storage_reader=storage_reader,
+                        planner=load_planner,
+                    )
+                    scheduler.load_state_dict(_state_dict)
+                elif key == "trainer":
+                    log.info("- Loading the trainer...")
+                    _state_dict = {
+                        "grad_scaler": grad_scaler.state_dict(),
+                        "iteration": iteration,
+                    }
+                    dcp.load(
+                        _state_dict,
+                        storage_reader=storage_reader,
+                        planner=load_planner,
+                    )
+                    grad_scaler.load_state_dict(_state_dict["grad_scaler"])
+                    iteration = _state_dict["iteration"]
+                else:
+                    raise ValueError(f"Invalid key: {key}. not support to resume.")
+            if self.callbacks is not None:
+                self.callbacks.on_load_checkpoint(model, state_dict=_state_dict)
+            log.critical(f"Loaded checkpoint from {checkpoint_path} in iteration {iteration}")
+        else:
+            log.info("Training from scratch.")
+        torch.cuda.empty_cache()
+
+        if self.callbacks is not None:
+            self.callbacks.on_load_checkpoint_end(model, iteration=iteration, checkpoint_path=checkpoint_path)
+        return iteration
+    
+    def load_with_file(
+        self,
+        model: ImaginaireModel,
+        optimizer: torch.optim.Optimizer | None = None,
+        scheduler: torch.optim.lr_scheduler.LRScheduler | None = None,
+        grad_scaler: torch.amp.GradScaler | None = None,
+        checkpoint_path: Optional[str] = None,
+    ) -> int:
+        if self.callbacks is not None:
+            self.callbacks.on_load_checkpoint_start(model)
+
+        resume_keys, checkpoint_path = self.keys_to_resume_during_load(checkpoint_path)
         resume_keys = sorted(resume_keys)
         log.critical(f"Resuming ckpt {checkpoint_path} with keys: {resume_keys}")
 

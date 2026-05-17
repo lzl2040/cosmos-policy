@@ -468,9 +468,10 @@ class Wan2pt1VAEInterface(VideoTokenizerInterface):
     Uses CosmosPolicyWanVAE which instantiates our deterministic WanVAE_ subclass.
     """
 
-    def __init__(self, chunk_duration: int = 81, load_mean_std=False, **kwargs):
+    def __init__(self, chunk_duration: int = 81, load_mean_std=False, device="cuda", **kwargs):
         self.keep_decoder_cache = kwargs.get("keep_decoder_cache", False)
         self.keep_encoder_cache = kwargs.get("keep_encoder_cache", False)
+        # print(f"Wan2pt1VAEInterface use Device:{device}")
         # Use our CosmosPolicyWanVAE instead of the base WanVAE
         self.model = CosmosPolicyWanVAE(
             dtype=torch.bfloat16,
@@ -484,6 +485,7 @@ class Wan2pt1VAEInterface(VideoTokenizerInterface):
             temporal_window=kwargs.get("temporal_window", 4),
             is_parallel=kwargs.get("is_parallel", False),
             cp_grid_shape=kwargs.get("cp_grid_shape", None),
+            device=device
         )
         del kwargs
         self.chunk_duration = chunk_duration

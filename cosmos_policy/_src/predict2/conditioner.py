@@ -472,7 +472,9 @@ class GeneralConditioner(nn.Module, ABC):
         for emb_name in override_dropout_rate.keys():
             assert emb_name in self.embedders, f"invalid name found {emb_name}"
 
+        # print(self.embedders)
         for emb_name, embedder in self.embedders.items():
+            # print(emb_name)
             embedding_context = nullcontext if embedder.is_trainable else torch.no_grad
             with embedding_context():
                 if isinstance(embedder.input_key, str):

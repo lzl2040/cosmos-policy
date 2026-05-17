@@ -124,32 +124,32 @@ class CosmosPolicyVideo2WorldModel(CosmosPolicyDiffusionModel):
         # proper elements are treated as additional conditioning input (beyond the usual conditioning inputs)
         # - World model (future state prediction): action chunk is additionally treated as conditioning input
         # - Value function (expected return prediction): action chunk and future state are additionally treated as conditioning input
-        # if "rollout_data_mask" in data_batch:
-        #     # For world model, set the video input mask to 1 for the action frame (i.e. make it a clean/denoised conditioning frame)
-        #     # For value function, set mask to 1 for everything except the value function return frame (should be 0)
-        #     world_model_sample_mask = data_batch["world_model_sample_mask"]
-        #     value_function_sample_mask = data_batch["value_function_sample_mask"]
-        #     # Expand masks from (B,) to (B, 1, 1, H', W')
-        #     H_latent, W_latent = condition.condition_video_input_mask_B_C_T_H_W.shape[-2:]
-        #     world_model_sample_mask = (
-        #         world_model_sample_mask.unsqueeze(1)
-        #         .unsqueeze(2)
-        #         .unsqueeze(3)
-        #         .unsqueeze(4)
-        #         .expand(-1, 1, 1, H_latent, W_latent)
-        #     ).to(condition.condition_video_input_mask_B_C_T_H_W.dtype)
-        #     value_function_sample_mask = (
-        #         value_function_sample_mask.unsqueeze(1)
-        #         .unsqueeze(2)
-        #         .unsqueeze(3)
-        #         .unsqueeze(4)
-        #         .expand(-1, 1, 1, H_latent, W_latent)
-        #     ).to(condition.condition_video_input_mask_B_C_T_H_W.dtype)
-        #     # World model: Set the action frame to 1
-        #     batch_indices = torch.arange(world_model_sample_mask.shape[0], device=world_model_sample_mask.device)
-        #     condition.condition_video_input_mask_B_C_T_H_W[batch_indices, :, data_batch["action_latent_idx"], :, :] = (
-        #         world_model_sample_mask[:, :, 0, :, :]
-        #     )
+        if "rollout_data_mask" in data_batch:
+            # For world model, set the video input mask to 1 for the action frame (i.e. make it a clean/denoised conditioning frame)
+            # For value function, set mask to 1 for everything except the value function return frame (should be 0)
+            world_model_sample_mask = data_batch["world_model_sample_mask"]
+            # value_function_sample_mask = data_batch["value_function_sample_mask"]
+            # Expand masks from (B,) to (B, 1, 1, H', W')
+            H_latent, W_latent = condition.condition_video_input_mask_B_C_T_H_W.shape[-2:]
+            world_model_sample_mask = (
+                world_model_sample_mask.unsqueeze(1)
+                .unsqueeze(2)
+                .unsqueeze(3)
+                .unsqueeze(4)
+                .expand(-1, 1, 1, H_latent, W_latent)
+            ).to(condition.condition_video_input_mask_B_C_T_H_W.dtype)
+            # value_function_sample_mask = (
+            #     value_function_sample_mask.unsqueeze(1)
+            #     .unsqueeze(2)
+            #     .unsqueeze(3)
+            #     .unsqueeze(4)
+            #     .expand(-1, 1, 1, H_latent, W_latent)
+            # ).to(condition.condition_video_input_mask_B_C_T_H_W.dtype)
+            # World model: Set the action frame to 1
+            batch_indices = torch.arange(world_model_sample_mask.shape[0], device=world_model_sample_mask.device)
+            condition.condition_video_input_mask_B_C_T_H_W[batch_indices, :, data_batch["action_latent_idx"], :, :] = (
+                world_model_sample_mask[:, :, 0, :, :]
+            )
         #     # Value function: Set everything except the value function return frame to 1
         #     # First, set all frames to 1 for value function samples
         #     T = condition.condition_video_input_mask_B_C_T_H_W.shape[2]
@@ -395,10 +395,8 @@ class CosmosPolicyVideo2WorldModel(CosmosPolicyDiffusionModel):
         self,
         xt_B_C_T_H_W: torch.Tensor,
         sigma: torch.Tensor,
-        action_sigma_B: torch.Tensor,
+        # action_sigma_B: torch.Tensor,
         condition: Text2WorldCondition,
-        action_latent: Optional[torch.Tensor] = None,
-        num_action_tokens: int = 4,
     ) -> Tuple[DenoisePrediction, Optional[torch.Tensor]]:
         """
         Performs denoising with optional debugging visualization support.
@@ -428,13 +426,9 @@ class CosmosPolicyVideo2WorldModel(CosmosPolicyDiffusionModel):
         sigma_B_1_T_1_1 = rearrange(sigma_B_T, "b t -> b 1 t 1 1")
         # get precondition for the network
         c_skip_B_1_T_1_1, c_out_B_1_T_1_1, c_in_B_1_T_1_1, c_noise_B_1_T_1_1 = self.scaling(sigma=sigma_B_1_T_1_1)
-        action_c_skip_B_T, action_c_out_B_T, action_c_in_B_T, action_c_noise_B_T = self.scaling(sigma=action_sigma_B)
-
+        
         net_state_in_B_C_T_H_W = xt_B_C_T_H_W * c_in_B_1_T_1_1
-        # print(action_latent.shape, action_c_in_B_T.shape, sigma_B_1_T_1_1.shape) # 6 4 768, (6, 1)
-        action_latent = action_latent * action_c_in_B_T.unsqueeze(-1)
-        action_latent = action_latent.to(**self.tensor_kwargs)
-
+        
         if condition.is_video:
             condition_state_in_B_C_T_H_W = condition.gt_frames.type_as(net_state_in_B_C_T_H_W) / self.config.sigma_data
             if not condition.use_video_condition:
@@ -442,6 +436,7 @@ class CosmosPolicyVideo2WorldModel(CosmosPolicyDiffusionModel):
                 condition_state_in_B_C_T_H_W = condition_state_in_B_C_T_H_W * 0
 
             _, C, _, _, _ = xt_B_C_T_H_W.shape
+            # 1 indicates frames used for conditioning and 0 indicates frames to be generated.
             condition_video_mask = condition.condition_video_input_mask_B_C_T_H_W.repeat(1, C, 1, 1, 1).type_as(
                 net_state_in_B_C_T_H_W
             )
@@ -460,6 +455,7 @@ class CosmosPolicyVideo2WorldModel(CosmosPolicyDiffusionModel):
             c_noise_B_1_T_1_1 = c_noise_cond_B_1_T_1_1 * condition_video_mask_B_1_T_1_1 + c_noise_B_1_T_1_1 * (
                 1 - condition_video_mask_B_1_T_1_1
             )
+            # print(condition_video_mask_B_1_T_1_1[0, :, 3])
 
         # forward pass through the network with optional action latent
         # print(action_latent.shape) if action_latent is not None else print("No action latent provided")
@@ -473,32 +469,12 @@ class CosmosPolicyVideo2WorldModel(CosmosPolicyDiffusionModel):
                     "dtype": torch.float32 if self.config.use_wan_fp32_strategy else self.tensor_kwargs["dtype"],
                 },
             ),  # Eq. 7 of https://arxiv.org/pdf/2206.00364.pdf
-            action_latent=action_latent,
-            num_action_tokens=num_action_tokens,
             **condition.to_dict(),
         )
         
-        # Handle different return types from network
-        action_output = None
-        if isinstance(net_output, tuple):
-            # Network returns (image_output, intermediate_features, action_output)
-            net_output_B_C_T_H_W = net_output[0].float()
-            action_output = net_output[2] if len(net_output) > 2 else None
-        else:
-            net_output_B_C_T_H_W = net_output.float()
+        net_output_B_C_T_H_W = net_output.float()
 
         x0_pred_B_C_T_H_W = c_skip_B_1_T_1_1 * xt_B_C_T_H_W + c_out_B_1_T_1_1 * net_output_B_C_T_H_W
-        
-        # Apply scaling to action_output (same as image latent)
-        # action_x0_pred = c_skip * action_latent + c_out * network_output
-        if action_output is not None and action_latent is not None:
-            # action_c_skip_B_T: [B, T] -> [B, 1] for action tokens (single noise level per sample)
-            # action_c_out_B_T: [B, T] -> [B, 1] for action tokens
-            action_c_skip = action_c_skip_B_T[:, :1]  # [B, 1]
-            action_c_out = action_c_out_B_T[:, :1]    # [B, 1]
-            # action_output: [B, num_action_tokens, hidden_dim]
-            # action_latent: [B, num_action_tokens, hidden_dim]
-            action_output = action_c_skip.unsqueeze(-1) * action_latent + action_c_out.unsqueeze(-1) * action_output
         
         if condition.is_video and self.config.denoise_replace_gt_frames:
             # Set the first few frames to the ground truth frames. This will ensure that the loss is not computed for the first few frames.
@@ -611,7 +587,7 @@ class CosmosPolicyVideo2WorldModel(CosmosPolicyDiffusionModel):
                     Image.fromarray(unnormalized_decoded_denoised_output[SAMPLE_INDEX, idx]).save(save_path)
                     print(f"Saved denoised latent frame at path: {save_path}")
 
-        return DenoisePrediction(x0_pred_B_C_T_H_W, eps_pred_B_C_T_H_W, None), action_output
+        return DenoisePrediction(x0_pred_B_C_T_H_W, eps_pred_B_C_T_H_W, None)
 
     def get_x0_fn_from_batch(
         self,

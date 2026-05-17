@@ -188,6 +188,9 @@ class Checkpointer:
         self.callbacks.on_load_checkpoint_start(model)
 
         latest_checkpoint_file = self._read_latest_checkpoint_file()
+        # print(latest_checkpoint_file)
+        # import time
+        # time.sleep(100)
         if latest_checkpoint_file is not None:
             # 1. Resume training from latest_checkpoint.txt under the same name.
             checkpoint_dir = (

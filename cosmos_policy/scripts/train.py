@@ -120,7 +120,7 @@ def launch(config: Config, args: argparse.Namespace) -> None:
         model,
         dataloader_train,
         dataloader_val,
-        pretrained_path=dcp_path
+        # pretrained_path=dcp_path
     )
 
 

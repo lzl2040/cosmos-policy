@@ -244,17 +244,17 @@ class CosmosPolicyDiffusionModel(BaseDiffusionModel):
         
         # add action decoder
         self.action_decoder = nn.Sequential(
-            nn.Linear(2048, 768),
+            nn.Linear(768, 768),
             nn.LayerNorm(768, eps=1e-6),
             nn.SiLU(),
             nn.Linear(768, 128), # 128 = 32 * group_size
         )
-        self.action_proj = nn.Sequential(
-            nn.Linear(768, 768),
-            nn.LayerNorm(768, eps=1e-6),
-            nn.SiLU(),
-            nn.Linear(768, 2048)
-        ).to(self.precision)
+        # self.action_proj = nn.Sequential(
+        #     nn.Linear(768, 768),
+        #     nn.LayerNorm(768, eps=1e-6),
+        #     nn.SiLU(),
+        #     nn.Linear(768, 2048)
+        # ).to(self.precision)
         self.action_group_size = 4
 
     def denoise(
@@ -372,7 +372,7 @@ class CosmosPolicyDiffusionModel(BaseDiffusionModel):
         x0_B_C_T_H_W, condition, epsilon_B_C_T_H_W, sigma_B_T = self.broadcast_split_for_model_parallelsim(
             x0_B_C_T_H_W, condition, epsilon_B_C_T_H_W, sigma_B_T
         )
-        output_batch, kendall_loss, _, _ = self.compute_loss_with_epsilon_and_sigma(
+        output_batch, kendall_loss, _, _, kendall_loss_action_mse_loss = self.compute_loss_with_epsilon_and_sigma(
             x0_B_C_T_H_W,
             condition,
             epsilon_B_C_T_H_W,
@@ -401,14 +401,14 @@ class CosmosPolicyDiffusionModel(BaseDiffusionModel):
         )
 
         # print(self.loss_reduce)
-        # if self.loss_reduce == "mean":
-            # kendall_loss = kendall_loss.mean() * self.loss_scale
-        # elif self.loss_reduce == "sum":
-        #     kendall_loss = kendall_loss.sum(dim=1).mean() * self.loss_scale
-        # else:
-        #     raise ValueError(f"Invalid loss_reduce: {self.loss_reduce}")
+        if self.loss_reduce == "mean":
+            kendall_loss = kendall_loss.mean() * self.loss_scale
+        elif self.loss_reduce == "sum":
+            kendall_loss = kendall_loss.sum(dim=1).mean() * self.loss_scale
+        else:
+            raise ValueError(f"Invalid loss_reduce: {self.loss_reduce}")
 
-        return output_batch, kendall_loss
+        return output_batch, kendall_loss + 0.2 * kendall_loss_action_mse_loss
 
     def compute_loss_with_epsilon_and_sigma(
         self,
@@ -483,41 +483,34 @@ class CosmosPolicyDiffusionModel(BaseDiffusionModel):
         batch_indices = torch.arange(x0_B_C_T_H_W.shape[0], device=x0_B_C_T_H_W.device)
         C_latent, H_latent, W_latent = x0_B_C_T_H_W.shape[1], x0_B_C_T_H_W.shape[3], x0_B_C_T_H_W.shape[4]
         
-        # print(gripper_index)
         # Prepare action embeddings (encode action chunk)
         # action_chunk: [B, chunk_size, action_dim]
         with torch.no_grad():
             action_embeddings = self.ace.action_encoder(action_chunk, sample_rate)  # [B, chunk_size // group_size, hidden_dim]
         
-        action_embeddings = self.action_proj(action_embeddings)  # [B, chunk_size // group_size, hidden_dim_dit]
-        # Add noise to action embeddings (noise is added after encoding)
-        # Draw noise for action embeddings
-        action_sigma_B, action_epsilon_B_N_D = self.draw_training_sigma_and_epsilon(
-            action_embeddings.size(), condition
+        # action_embeddings = self.action_proj(action_embeddings)  # [B, chunk_size // group_size, hidden_dim_dit]
+        
+        # Action
+        x0_B_C_T_H_W = replace_latent_with_action_chunk(
+            x0_B_C_T_H_W,
+            action_embeddings,
+            action_indices=action_indices,
         )
-        # Noisify action embeddings
-        action_mean_B_N_D, action_std_B_N = self.sde.marginal_prob(action_embeddings, action_sigma_B)
-        noisy_action_embeddings = action_mean_B_N_D + action_epsilon_B_N_D * rearrange(action_std_B_N, "b n -> b n 1")
-        # noisy_action_embeddings = noisy_action_embeddings.to(**self.tensor_kwargs)
         
-        # Get the number of action tokens
-        num_action_tokens = action_embeddings.shape[1]  # chunk_size // group_size
+        condition.orig_gt_frames = condition.gt_frames.clone()  # Keep a backup of the original gt_frames
+        condition.gt_frames = replace_latent_with_action_chunk(
+            condition.gt_frames, action_embeddings, action_indices=action_indices
+        )
         
-        # NOTE: No longer injecting action/proprio into image latent
-        # Action will be concatenated as separate tokens in the denoising network
-
         # Get the mean and stand deviation of the marginal probability distribution.
         mean_B_C_T_H_W, std_B_T = self.sde.marginal_prob(x0_B_C_T_H_W, sigma_B_T)
         # Generate noisy observations
         xt_B_C_T_H_W = mean_B_C_T_H_W + epsilon_B_C_T_H_W * rearrange(std_B_T, "b t -> b 1 t 1 1")
         # make prediction - pass action latent to denoise network
-        model_pred, action_output = self.denoise(
+        model_pred = self.denoise(
             xt_B_C_T_H_W, 
             sigma_B_T, 
-            action_sigma_B,
             condition,
-            action_latent=noisy_action_embeddings,
-            num_action_tokens=num_action_tokens,
         )
         # loss weights for different noise levels
         weights_per_sigma_B_T = self.get_per_sigma_loss_weights(sigma=sigma_B_T)
@@ -528,35 +521,23 @@ class CosmosPolicyDiffusionModel(BaseDiffusionModel):
 
         # extra loss mask for each sample, for example, human faces, hands
         pred_mse_B_C_T_H_W = (x0_B_C_T_H_W - model_pred.x0) ** 2
-        # pred_mse_B_C_T_H_W[:, :, action_indices] = 0.0
         edm_loss_B_C_T_H_W = pred_mse_B_C_T_H_W * rearrange(weights_per_sigma_B_T, "b t -> b 1 t 1 1")
         
-        kendall_loss = edm_loss_B_C_T_H_W
-        # kendall_loss[:, :, action_indices] = 0.0
-        # kendall_loss[:, :, future_proprio_indices] = 0.0
+        kendall_loss = edm_loss_B_C_T_H_W # prediction loss
         
-        kendall_loss_wo_action = kendall_loss.mean()
-        # print(action_output)
         
-        # for action decoding - use action_output from network instead of extracting from image latent
-        # action_output: [B, num_action_tokens, hidden_dim] -> decode to action space
-        if action_output is not None:
-            pred_action = self.action_decoder(action_output)  # [B, num_action_tokens, action_dim * group_size]
-            pred_action = pred_action.view(pred_action.shape[0], pred_action.shape[1], self.action_group_size, -1) 
-            pred_action = pred_action.view(pred_action.shape[0], -1, pred_action.shape[-1])  # [B, chunk_size, action_dim]
-            kendall_loss_action_mse_loss = ((pred_action - action_chunk) ** 2).mean()
-            kendall_loss_action_l1_loss = torch.abs(pred_action - action_chunk).mean()
-            # print(f"Kendall loss action mse: {kendall_loss_action_mse_loss.item():.4f}, l1: {kendall_loss_action_l1_loss.item():.4f}")
-            # print(f"{pred_action[0, :2, :7]}, {action_chunk[0, :2, :7]} Kendall loss action mse: {kendall_loss_action_mse_loss.item():.4f}, l1: {kendall_loss_action_l1_loss.item():.4f}")  # Print first 4 action tokens for the first sample
-        else:
-            kendall_loss_action_mse_loss = torch.tensor(0.0, device=kendall_loss_wo_action.device)
-            kendall_loss_action_l1_loss = torch.tensor(0.0, device=kendall_loss_wo_action.device)
+        # action reconstruction loss
+        action_shape = action_embeddings.shape[1:]
+        pred_action_embeds = extract_action_chunk_from_latent_sequence(model_pred.x0, action_shape, action_indices)
+        pred_action = self.action_decoder(pred_action_embeds)  # [B, chunk_size // group_size, action_dim]
+        pred_action = pred_action.view(pred_action.shape[0], pred_action.shape[1], self.action_group_size, -1) 
+        pred_action = pred_action.view(pred_action.shape[0], -1, pred_action.shape[-1])  # [B, chunk_size, action_dim]
+        kendall_loss_action_mse_loss = ((pred_action - action_chunk) ** 2).mean()
+        kendall_loss_action_l1_loss = torch.abs(pred_action - action_chunk).mean()
+        # print(f"Kendall loss action mse: {kendall_loss_action_mse_loss.item():.4f}, l1: {kendall_loss_action_l1_loss.item():.4f}") 
         
-        kendall_loss_state_mse_loss = kendall_loss_action_mse_loss
-        kendall_loss_state_l1_loss = kendall_loss_action_l1_loss
-        
-        kendall_loss = kendall_loss_action_mse_loss + kendall_loss_wo_action
-        
+        kendall_loss_state_mse_loss = torch.tensor(0.0, device=x0_B_C_T_H_W.device)
+        kendall_loss_state_l1_loss = torch.tensor(0.0, device=x0_B_C_T_H_W.device)
 
         # Get losses for future third-person image prediction
         if torch.all(future_image_indices != -1):  # -1 indicates future third-person image is not used
@@ -709,7 +690,7 @@ class CosmosPolicyDiffusionModel(BaseDiffusionModel):
             "value_function_sample_value_mse_loss": value_function_sample_value_mse_loss,  # Main loss for value function
             "value_function_sample_value_l1_loss": value_function_sample_value_l1_loss,  # Main loss for value function
         }
-        return output_batch, kendall_loss, pred_mse_B_C_T_H_W, edm_loss_B_C_T_H_W
+        return output_batch, kendall_loss, pred_mse_B_C_T_H_W, edm_loss_B_C_T_H_W, kendall_loss_action_mse_loss
 
     def generate_samples_from_batch(
         self,

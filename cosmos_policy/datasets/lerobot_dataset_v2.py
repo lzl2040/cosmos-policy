@@ -889,7 +889,7 @@ class LeRobotDataset(torch.utils.data.Dataset):
             # )
             frames = decode_video_frames(video_path, query_ts, self.tolerance_s, "pyav", 
                                          return_type="image", worker_count=10)
-            # print(vid_key, frames.shape)
+            # print(vid_key, len(frames), len(query_ts))
             item[vid_key] = frames
 
         return item
@@ -1618,6 +1618,14 @@ class MultiDatasetforDistTraining(torch.utils.data.Dataset):
         else:
             item = self.full_dataset[index]
         
+        is_world_model_sample = False
+        is_value_function_sample = False
+        p_world_model = 0.5
+        if random.random() < p_world_model:
+            is_world_model_sample = True
+        else:
+            is_world_model_sample = False
+        
         # del item
         task_id = item["task_index"].item()
         dataset_name = item["dataset_name"]
@@ -1710,6 +1718,13 @@ class MultiDatasetforDistTraining(torch.utils.data.Dataset):
         # NOTE: Action is no longer stored as image latent placeholder
         # Action will be encoded separately and concatenated as tokens in the denoising network
         action_latent_idx = -1
+        # Add blank image for action chunk
+        blank_image = np.zeros_like(item[IMAGE_PRIMARY][CURRENT_IDX])
+        # Duplicate blank image
+        blank_image = duplicate_array(blank_image, total_num_copies=self.num_duplicates_per_image)
+        image_list.append(blank_image)
+        action_latent_idx = current_sequence_idx
+        current_sequence_idx += 1
         
         # future state
         
@@ -1783,7 +1798,8 @@ class MultiDatasetforDistTraining(torch.utils.data.Dataset):
             
             "rollout_data_mask": 0, # demonstration data, not use it, because it will replace gt_frames with action
             "rollout_data_success_mask": 1,
-            "world_model_sample_mask": 0,
+            "world_model_sample_mask": 1 if is_world_model_sample else 0,
+            # not use value sample
             "value_function_sample_mask": 0,
             # "global_rollout_idx": global_rollout_idx,
             "action_latent_idx": action_latent_idx,

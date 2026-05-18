@@ -889,6 +889,8 @@ class LeRobotDataset(torch.utils.data.Dataset):
             # )
             frames = decode_video_frames(video_path, query_ts, self.tolerance_s, "pyav", 
                                          return_type="image", worker_count=10)
+            # frames = decode_video_frames(video_path, query_ts, self.tolerance_s, "torchcodec", 
+            #                              return_type="image", worker_count=10)
             # print(vid_key, len(frames), len(query_ts))
             item[vid_key] = frames
 

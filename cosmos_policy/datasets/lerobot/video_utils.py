@@ -480,27 +480,30 @@ def decode_video_frames_torchvision(
         reader.container.close()
 
     reader = None
+    
+    query_ts = torch.tensor(timestamps)
+    loaded_ts = torch.tensor(loaded_ts)
+
+    # compute distances between each query timestamp and timestamps of all loaded frames
+    dist = torch.cdist(query_ts[:, None], loaded_ts[:, None], p=1)
+    min_, argmin_ = dist.min(1)
+
+    is_within_tol = min_ < tolerance_s
+    assert is_within_tol.all(), (
+        f"One or several query timestamps unexpectedly violate the tolerance ({min_[~is_within_tol]} > {tolerance_s=})."
+        "It means that the closest frame that can be loaded from the video is too far away in time."
+        "This might be due to synchronization issues with timestamps during data collection."
+        "To be safe, we advise to ignore this item during training."
+        f"\nqueried timestamps: {query_ts}"
+        f"\nloaded timestamps: {loaded_ts}"
+        f"\nvideo: {video_path}"
+        f"\nbackend: {backend}"
+    )
+    
+    closest_frames = torch.stack([loaded_frames[idx] for idx in argmin_])
+    closest_ts = loaded_ts[argmin_]
 
     if not return_all:
-        query_ts = torch.tensor(timestamps)
-        loaded_ts = torch.tensor(loaded_ts)
-
-        # compute distances between each query timestamp and timestamps of all loaded frames
-        dist = torch.cdist(query_ts[:, None], loaded_ts[:, None], p=1)
-        min_, argmin_ = dist.min(1)
-
-        is_within_tol = min_ < tolerance_s
-        assert is_within_tol.all(), (
-            f"One or several query timestamps unexpectedly violate the tolerance ({min_[~is_within_tol]} > {tolerance_s=})."
-            "It means that the closest frame that can be loaded from the video is too far away in time."
-            "This might be due to synchronization issues with timestamps during data collection."
-            "To be safe, we advise to ignore this item during training."
-            f"\nqueried timestamps: {query_ts}"
-            f"\nloaded timestamps: {loaded_ts}"
-            f"\nvideo: {video_path}"
-            f"\nbackend: {backend}"
-        )
-
         if return_type == "tensor":
             # get closest frames to the query timestamps
             closest_frames = torch.stack([loaded_frames[idx] for idx in argmin_])
@@ -528,8 +531,9 @@ def decode_video_frames_torchvision(
             return image_list
     else:
         if return_type == "tensor":
-            loaded_ts = torch.tensor(loaded_ts)
-            closest_frames = torch.stack(loaded_frames)
+            # print(loaded_ts, timestamps)
+            # loaded_ts = torch.tensor(loaded_ts)
+            # closest_frames = torch.stack(loaded_frames)
             # closest_frames = closest_frames.type(torch.float32) / 255
             
             if log_loaded_timestamps:
@@ -539,14 +543,14 @@ def decode_video_frames_torchvision(
         elif return_type == "image":
             image_list = []
             # print(loaded_frames.shape)
-            for idx in range(len(loaded_frames)):
-                img = Image.fromarray(loaded_frames[idx].numpy().astype(np.uint8).transpose(1, 2, 0))
+            for idx in range(len(closest_frames)):
+                img = Image.fromarray(closest_frames[idx].numpy().astype(np.uint8).transpose(1, 2, 0))
                 image_list.append(img)
             return image_list
         elif return_type == "numpy":
             image_list = []
-            for idx in range(len(loaded_frames)):
-                img = loaded_frames[idx].numpy().astype(np.uint8).transpose(1, 2, 0)
+            for idx in range(len(closest_frames)):
+                img = closest_frames[idx].numpy().astype(np.uint8).transpose(1, 2, 0)
                 image_list.append(img)
             return image_list
 

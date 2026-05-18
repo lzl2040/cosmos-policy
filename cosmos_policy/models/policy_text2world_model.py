@@ -527,15 +527,17 @@ class CosmosPolicyDiffusionModel(BaseDiffusionModel):
         
         
         # action reconstruction loss
-        action_shape = action_embeddings.shape[1:]
-        pred_action_embeds = extract_action_chunk_from_latent_sequence(model_pred.x0, action_shape, action_indices)
-        pred_action = self.action_decoder(pred_action_embeds)  # [B, chunk_size // group_size, action_dim]
-        pred_action = pred_action.view(pred_action.shape[0], pred_action.shape[1], self.action_group_size, -1) 
-        pred_action = pred_action.view(pred_action.shape[0], -1, pred_action.shape[-1])  # [B, chunk_size, action_dim]
-        kendall_loss_action_mse_loss = ((pred_action - action_chunk) ** 2).mean()
-        kendall_loss_action_l1_loss = torch.abs(pred_action - action_chunk).mean()
+        # action_shape = action_embeddings.shape[1:]
+        # pred_action_embeds = extract_action_chunk_from_latent_sequence(model_pred.x0, action_shape, action_indices)
+        # pred_action = self.action_decoder(pred_action_embeds)  # [B, chunk_size // group_size, action_dim]
+        # pred_action = pred_action.view(pred_action.shape[0], pred_action.shape[1], self.action_group_size, -1) 
+        # pred_action = pred_action.view(pred_action.shape[0], -1, pred_action.shape[-1])  # [B, chunk_size, action_dim]
+        # kendall_loss_action_mse_loss = ((pred_action - action_chunk) ** 2).mean()
+        # kendall_loss_action_l1_loss = torch.abs(pred_action - action_chunk).mean()
         # print(f"Kendall loss action mse: {kendall_loss_action_mse_loss.item():.4f}, l1: {kendall_loss_action_l1_loss.item():.4f}") 
         
+        kendall_loss_action_mse_loss = torch.tensor(0.0, device=x0_B_C_T_H_W.device)
+        kendall_loss_action_l1_loss = torch.tensor(0.0, device=x0_B_C_T_H_W.device)
         kendall_loss_state_mse_loss = torch.tensor(0.0, device=x0_B_C_T_H_W.device)
         kendall_loss_state_l1_loss = torch.tensor(0.0, device=x0_B_C_T_H_W.device)
 
@@ -613,10 +615,10 @@ class CosmosPolicyDiffusionModel(BaseDiffusionModel):
             all_samples_future_proprio_mse_loss = torch.tensor(float("nan"), device=x0_B_C_T_H_W.device)
             all_samples_future_proprio_l1_loss = torch.tensor(float("nan"), device=x0_B_C_T_H_W.device)
 
-        demo_sample_action_mse_loss = torch.tensor(float("nan"), device=x0_B_C_T_H_W.device)  # Mask out demo sample action loss for now (not used in current experiments)
-        demo_sample_action_l1_loss = torch.tensor(float("nan"), device=x0_B_C_T_H_W.device)
-        all_samples_action_mse_loss = torch.tensor(float("nan"), device=x0_B_C_T_H_W.device)  # Mask out all sample action loss for now (not used in current experiments)
-        all_samples_action_l1_loss = torch.tensor(float("nan"), device=x0_B_C_T_H_W.device)
+        # demo_sample_action_mse_loss = torch.tensor(float("nan"), device=x0_B_C_T_H_W.device)  # Mask out demo sample action loss for now (not used in current experiments)
+        # demo_sample_action_l1_loss = torch.tensor(float("nan"), device=x0_B_C_T_H_W.device)
+        # all_samples_action_mse_loss = torch.tensor(float("nan"), device=x0_B_C_T_H_W.device)  # Mask out all sample action loss for now (not used in current experiments)
+        # all_samples_action_l1_loss = torch.tensor(float("nan"), device=x0_B_C_T_H_W.device)
         
         value_function_sample_value_mse_loss = torch.tensor(float("nan"), device=x0_B_C_T_H_W.device)  # Mask out value function loss for now (not used in current experiments)
         value_function_sample_value_l1_loss = torch.tensor(float("nan"), device=x0_B_C_T_H_W.device)    
@@ -626,15 +628,15 @@ class CosmosPolicyDiffusionModel(BaseDiffusionModel):
         demo_sample_value_l1_loss = torch.tensor(float("nan"), device=x0_B_C_T_H_W.device)
         
         # Get losses for action prediction
-        # action_diff = (
-        #     x0_B_C_T_H_W[batch_indices, :, action_indices, :, :] - model_pred.x0[batch_indices, :, action_indices, :, :]
-        # )
-        # action_diff_demo = action_diff[rollout_data_mask == 0]
-        # action_diff_world_model = action_diff[world_model_sample_mask == 1]
-        # demo_sample_action_mse_loss = (action_diff_demo**2).mean()
-        # demo_sample_action_l1_loss = torch.abs(action_diff_demo).mean()
-        # all_samples_action_mse_loss = (action_diff**2).mean()
-        # all_samples_action_l1_loss = torch.abs(action_diff).mean()
+        action_diff = (
+            x0_B_C_T_H_W[batch_indices, :, action_indices, :, :] - model_pred.x0[batch_indices, :, action_indices, :, :]
+        )
+        action_diff_demo = action_diff[rollout_data_mask == 0]
+        action_diff_world_model = action_diff[world_model_sample_mask == 1]
+        demo_sample_action_mse_loss = (action_diff_demo**2).mean()
+        demo_sample_action_l1_loss = torch.abs(action_diff_demo).mean()
+        all_samples_action_mse_loss = (action_diff**2).mean()
+        all_samples_action_l1_loss = torch.abs(action_diff).mean()
 
         # Get losses for value function prediction
         # value_diff = (

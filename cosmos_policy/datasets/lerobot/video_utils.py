@@ -31,7 +31,7 @@ from PIL import Image
 import importlib
 from threading import Lock
 import fsspec
-from torchcodec.decoders import VideoDecoder
+# from torchcodec.decoders import VideoDecoder
 import math
 from typing import List
 from concurrent.futures import ThreadPoolExecutor

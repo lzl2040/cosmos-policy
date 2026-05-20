@@ -1391,6 +1391,7 @@ class MultiDatasetforDistTraining(torch.utils.data.Dataset):
         
         # in fact, we do not use it, so just simply copy
         self.meta = ds_meta
+        print(self.stats)
         
         if self.stage == "finetune":
             t5_text_embeddings_path = os.path.join(parent_dir, f"t5_embeddings_{data_mix}.pkl")

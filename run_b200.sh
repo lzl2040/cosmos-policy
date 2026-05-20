@@ -74,7 +74,7 @@ while [[ $# -gt 0 ]]; do
             ;;
     esac
 done
-# export PATH="/opt/conda/envs/lerobot/bin:$PATH"
+export PATH="/opt/conda/envs/lerobot/bin:$PATH"
 echo $PATH
 ffmpeg
 uv run --no-sync --extra cu128 --group libero --python 3.10 \

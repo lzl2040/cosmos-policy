@@ -526,17 +526,17 @@ class CosmosPolicyDiffusionModel(BaseDiffusionModel):
         kendall_loss = edm_loss_B_C_T_H_W # prediction loss
         
         # action reconstruction loss
-        action_shape = action_embeddings.shape[1:]
-        pred_action_embeds = extract_action_chunk_from_latent_sequence(model_pred.x0, action_shape, action_indices)
-        pred_action = self.action_decoder(pred_action_embeds)  # [B, chunk_size // group_size, action_dim]
-        pred_action = pred_action.view(pred_action.shape[0], pred_action.shape[1], self.action_group_size, -1) 
-        pred_action = pred_action.view(pred_action.shape[0], -1, pred_action.shape[-1])  # [B, chunk_size, action_dim]
-        kendall_loss_action_mse_loss = ((pred_action - action_chunk) ** 2).mean()
-        kendall_loss_action_l1_loss = torch.abs(pred_action - action_chunk).mean()
+        # action_shape = action_embeddings.shape[1:]
+        # pred_action_embeds = extract_action_chunk_from_latent_sequence(model_pred.x0, action_shape, action_indices)
+        # pred_action = self.action_decoder(pred_action_embeds)  # [B, chunk_size // group_size, action_dim]
+        # pred_action = pred_action.view(pred_action.shape[0], pred_action.shape[1], self.action_group_size, -1) 
+        # pred_action = pred_action.view(pred_action.shape[0], -1, pred_action.shape[-1])  # [B, chunk_size, action_dim]
+        # kendall_loss_action_mse_loss = ((pred_action - action_chunk) ** 2).mean()
+        # kendall_loss_action_l1_loss = torch.abs(pred_action - action_chunk).mean()
         # print(f"Kendall loss action mse: {kendall_loss_action_mse_loss.item():.4f}, l1: {kendall_loss_action_l1_loss.item():.4f}") 
         
-        # kendall_loss_action_mse_loss = torch.tensor(0.0, device=x0_B_C_T_H_W.device)
-        # kendall_loss_action_l1_loss = torch.tensor(0.0, device=x0_B_C_T_H_W.device)
+        kendall_loss_action_mse_loss = torch.tensor(0.0, device=x0_B_C_T_H_W.device)
+        kendall_loss_action_l1_loss = torch.tensor(0.0, device=x0_B_C_T_H_W.device)
         kendall_loss_state_mse_loss = torch.tensor(0.0, device=x0_B_C_T_H_W.device)
         kendall_loss_state_l1_loss = torch.tensor(0.0, device=x0_B_C_T_H_W.device)
 

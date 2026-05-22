@@ -643,6 +643,7 @@ class CosmosPolicyVideo2WorldModel(CosmosPolicyDiffusionModel):
         else:
             _, x0, _ = self.get_data_and_condition(data_batch)
         # override condition with inference mode; num_conditional_frames used Here!
+        # first use num_conditional_frames, then conditional_frames_probs, final min_num_conditional_frames
         condition = condition.set_video_condition(
             gt_frames=x0,
             random_min_num_conditional_frames=self.config.min_num_conditional_frames,
@@ -774,11 +775,11 @@ class CosmosPolicyVideo2WorldModel(CosmosPolicyDiffusionModel):
                 uncond_velocity = self.denoise_with_velocity(noise_x, sigma, uncondition)
                 velocity = uncond_velocity + guidance * (cond_velocity - uncond_velocity)
                 return velocity
-            denoise_output, _ = self.denoise(noise_x, sigma, condition)
+            denoise_output = self.denoise(noise_x, sigma, condition)
             cond_x0 = denoise_output.x0
             # default not has this
             if uncondition is not None:
-                uncond_denoise_output, _ = self.denoise(noise_x, sigma, uncondition)
+                uncond_denoise_output = self.denoise(noise_x, sigma, uncondition)
                 uncond_x0 = uncond_denoise_output.x0
                 raw_x0 = cond_x0 + guidance * (cond_x0 - uncond_x0)
             else:

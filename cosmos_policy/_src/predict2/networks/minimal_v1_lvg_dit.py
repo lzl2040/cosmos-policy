@@ -20,6 +20,8 @@ import torch
 from cosmos_policy._src.predict2.conditioner import DataType
 from cosmos_policy._src.predict2.networks.minimal_v4_dit import MiniTrainDIT
 
+# from cosmos_policy.models.ace import ACE
+# import os
 
 class MinimalV1LVGDiT(MiniTrainDIT):
     def __init__(self, *args, timestep_scale: float = 1.0, **kwargs):

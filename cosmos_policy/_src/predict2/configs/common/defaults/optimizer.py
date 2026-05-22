@@ -30,7 +30,7 @@ AdamWConfig = L(get_base_optimizer)(
 )
 
 FusedAdamWConfig: LazyDict = L(get_base_optimizer)(
-    model=PLACEHOLDER,
+    models=PLACEHOLDER,
     lr=1e-4,
     weight_decay=0.1,
     betas=[0.9, 0.99],

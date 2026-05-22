@@ -173,7 +173,8 @@ class DiffusionModel(ImaginaireModel):
         # ace_pt_path = "/mnt/pvc/msra-training_data/weights/pt_ace/step_26k/mp_rank_00_model_states.pt"
         vision_model_name: str = "/mnt/pvc/msra-training_data/weights/siglip2-base-patch16-224/"
         # for b200 03
-        ace_pt_path = "/mnt/pvc/robo_home/lzl_ckpts/ace_pt_weights/step_26k/mp_rank_00_model_states.pt"
+        # 0522_ace(0520 in blob): fix action equal zero bug
+        ace_pt_path = "/mnt/pvc/robo_home/lzl_ckpts/ace_pt_weights/0522_ace/step_4k/mp_rank_00_model_states.pt"
         vision_model_name = vision_model_name if os.path.isdir(vision_model_name) else "google/siglip2-base-patch16-224"
         
         self.ace = ACE(vision_model_name=vision_model_name).to(self.precision)
@@ -308,7 +309,7 @@ class DiffusionModel(ImaginaireModel):
             optimizer (torch.optim.Optimizer): The model optimizer.
             scheduler (torch.optim.lr_scheduler.LRScheduler): The optimization scheduler.
         """
-        optimizer = lazy_instantiate(optimizer_config, model=self.net)
+        optimizer = lazy_instantiate(optimizer_config, models=[self.net, self.ace.action_encoder.action_decoder])
         scheduler = get_base_scheduler(optimizer, self, scheduler_config)
         return optimizer, scheduler
 
@@ -820,6 +821,8 @@ class DiffusionModel(ImaginaireModel):
 
     def state_dict(self) -> Dict[str, Any]:
         net_state_dict = self.net.state_dict(prefix="net.")
+        ace_net_state_dict = self.ace.state_dict(prefix="ace.")
+        net_state_dict.update(ace_net_state_dict)
         if self.config.ema.enabled:
             ema_state_dict = self.net_ema.state_dict(prefix="net_ema.")
             net_state_dict.update(ema_state_dict)
@@ -841,26 +844,30 @@ class DiffusionModel(ImaginaireModel):
         """
         _reg_state_dict = collections.OrderedDict()
         _ema_state_dict = collections.OrderedDict()
+        _ace_state_dict = collections.OrderedDict()
         for k, v in state_dict.items():
             if k.startswith("net."):
                 _reg_state_dict[k.replace("net.", "")] = v
             elif k.startswith("net_ema."):
                 _ema_state_dict[k.replace("net_ema.", "")] = v
+            elif k.startswith("ace."):
+                _ace_state_dict[k.replace("ace.", "")] = v
 
         state_dict = _reg_state_dict
 
         if strict:
             reg_results: _IncompatibleKeys = self.net.load_state_dict(_reg_state_dict, strict=strict, assign=assign)
-
+            ace_results: _IncompatibleKeys = self.ace.load_state_dict(_ace_state_dict, strict=strict, assign=assign)
             if self.config.ema.enabled:
                 ema_results: _IncompatibleKeys = self.net_ema.load_state_dict(
                     _ema_state_dict, strict=strict, assign=assign
                 )
 
             return _IncompatibleKeys(
-                missing_keys=reg_results.missing_keys + (ema_results.missing_keys if self.config.ema.enabled else []),
+                missing_keys=reg_results.missing_keys + (ema_results.missing_keys if self.config.ema.enabled else []) + (ace_results.missing_keys if self.config.ace.enabled else []),
                 unexpected_keys=reg_results.unexpected_keys
-                + (ema_results.unexpected_keys if self.config.ema.enabled else []),
+                + (ema_results.unexpected_keys if self.config.ema.enabled else [])
+                + (ace_results.unexpected_keys if self.config.ace.enabled else []),
             )
         else:
             log.critical("load model in non-strict mode")
@@ -1012,6 +1019,7 @@ class DiffusionModel(ImaginaireModel):
     def encode(self, state: torch.Tensor) -> torch.Tensor:
         # print(state.device)
         # return self.tokenizer.encode(state) * self.sigma_data
+        # return self.ace.vision_model(state)
         return self.ace.vision_model(state)
 
     # @torch.no_grad()

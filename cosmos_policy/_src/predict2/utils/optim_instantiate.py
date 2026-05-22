@@ -23,38 +23,57 @@ from cosmos_policy._src.imaginaire.utils import log
 from cosmos_policy._src.predict2.utils.fused_adam_dtensor import FusedAdam
 
 
-def get_regular_param_group(net: nn.Module):
-    """
-    seperate the parameters of the network into two groups: decay and no_decay.
-    based on nano_gpt codebase.
-    """
-    param_dict = {pn: p for pn, p in net.named_parameters()}
-    param_dict = {pn: p for pn, p in param_dict.items() if p.requires_grad}
+from typing import List
+import torch
+import torch.nn as nn
 
-    decay_params = [p for n, p in param_dict.items() if p.dim() >= 2]
-    nodecay_params = [p for n, p in param_dict.items() if p.dim() < 2]
+
+def get_regular_param_group(models: List[nn.Module]):
+    """
+    Separate parameters into decay and no_decay groups
+    from multiple models.
+    """
+
+    param_dict = {}
+
+    for model in models:
+        for pn, p in model.named_parameters():
+            if p.requires_grad:
+                # 防止不同模型中参数名重复
+                param_dict[f"{id(model)}.{pn}"] = p
+    print(param_dict.keys())
+    decay_params = [p for _, p in param_dict.items() if p.dim() >= 2]
+    nodecay_params = [p for _, p in param_dict.items() if p.dim() < 2]
+
     return decay_params, nodecay_params
 
 
 def get_base_optimizer(
-    model: nn.Module,
+    models: List[nn.Module],
     lr: float,
     weight_decay: float,
     optim_type: str = "adamw",
     **kwargs,
 ) -> torch.optim.Optimizer:
-    net_decay_param, net_nodecay_param = get_regular_param_group(model)
+
+    net_decay_param, net_nodecay_param = get_regular_param_group(models)
 
     num_decay_params = sum(p.numel() for p in net_decay_param)
     num_nodecay_params = sum(p.numel() for p in net_nodecay_param)
     net_param_total = num_decay_params + num_nodecay_params
+
     log.critical(f"total num parameters : {net_param_total:,}")
 
     param_group = [
         {
-            "params": net_decay_param + net_nodecay_param,
+            "params": net_decay_param,
             "lr": lr,
             "weight_decay": weight_decay,
+        },
+        {
+            "params": net_nodecay_param,
+            "lr": lr,
+            "weight_decay": 0.0,
         },
     ]
 

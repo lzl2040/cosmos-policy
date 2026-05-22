@@ -26,9 +26,10 @@ class ACEConfig:
     num_attention_heads: int = 12
     num_hidden_layers: int = 12
     intermediate_dim: int = 3072
-    dropout: float = 0.1
+    dropout: float = 0.0
     max_position_embeddings: int = 512
     output_dim: int = None
+    frozen_ace: bool = False
     
     def __post_init__(self):
         if self.output_dim is None:
@@ -66,6 +67,98 @@ from typing import Optional, Tuple
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
+
+
+## decoder
+class ACEDecoderAttention(nn.Module):
+    """Self-attention for temporal action-token decoding."""
+
+    def __init__(self, config: ACEConfig):
+        super().__init__()
+
+        self.hidden_dim = config.hidden_dim
+        self.num_heads = config.num_attention_heads
+        self.head_dim = config.hidden_dim // config.num_attention_heads
+
+        assert self.hidden_dim % self.num_heads == 0
+
+        self.q_proj = nn.Linear(self.hidden_dim, self.hidden_dim)
+        self.k_proj = nn.Linear(self.hidden_dim, self.hidden_dim)
+        self.v_proj = nn.Linear(self.hidden_dim, self.hidden_dim)
+        self.o_proj = nn.Linear(self.hidden_dim, self.hidden_dim)
+
+        self.dropout = nn.Dropout(config.dropout)
+
+    def forward(self, x: torch.Tensor, attention_mask: Optional[torch.Tensor] = None):
+        bsz, seq_len, _ = x.shape
+
+        q = self.q_proj(x)
+        k = self.k_proj(x)
+        v = self.v_proj(x)
+
+        q = q.view(bsz, seq_len, self.num_heads, self.head_dim).transpose(1, 2)
+        k = k.view(bsz, seq_len, self.num_heads, self.head_dim).transpose(1, 2)
+        v = v.view(bsz, seq_len, self.num_heads, self.head_dim).transpose(1, 2)
+
+        scores = torch.matmul(q, k.transpose(-2, -1)) / math.sqrt(self.head_dim)
+
+        if attention_mask is not None:
+            scores = scores + attention_mask
+
+        attn = F.softmax(scores, dim=-1)
+        attn = self.dropout(attn)
+
+        out = torch.matmul(attn, v)
+        out = out.transpose(1, 2).contiguous().view(bsz, seq_len, self.hidden_dim)
+
+        return self.o_proj(out)
+
+
+class ACEDecoderMLP(nn.Module):
+    def __init__(self, config: ACEConfig):
+        super().__init__()
+
+        self.fc1 = nn.Linear(config.hidden_dim, config.hidden_dim * 4)
+        self.fc2 = nn.Linear(config.hidden_dim * 4, config.hidden_dim)
+        self.act = nn.GELU()
+        self.dropout = nn.Dropout(config.dropout)
+
+    def forward(self, x: torch.Tensor):
+        x = self.fc1(x)
+        x = self.act(x)
+        x = self.dropout(x)
+        x = self.fc2(x)
+        x = self.dropout(x)
+        return x
+
+
+class ACEDecoderLayer(nn.Module):
+    """Pre-norm temporal decoder layer."""
+
+    def __init__(self, config: ACEConfig):
+        super().__init__()
+
+        self.attention = ACEDecoderAttention(config)
+        self.mlp = ACEDecoderMLP(config)
+
+        self.norm1 = nn.LayerNorm(config.hidden_dim)
+        self.norm2 = nn.LayerNorm(config.hidden_dim)
+
+        self.dropout = nn.Dropout(config.dropout)
+
+    def forward(self, x: torch.Tensor, attention_mask: Optional[torch.Tensor] = None):
+        residual = x
+        x = self.norm1(x)
+        x = self.attention(x, attention_mask=attention_mask)
+        x = self.dropout(x)
+        x = residual + x
+
+        residual = x
+        x = self.norm2(x)
+        x = self.mlp(x)
+        x = residual + x
+
+        return x
 
 class RotaryPositionEmbedding(nn.Module):
     """Rotary Position Embedding (RoPE) cache.
@@ -351,23 +444,74 @@ class ACELayer(nn.Module):
         return hidden_states
 
 
+class ActionReconstructionHead(nn.Module):
+    """Temporal decoder for reconstructing action groups from action tokens."""
+
+    def __init__(self, config: ACEConfig):
+        super().__init__()
+
+        self.group_dim = config.group_size * config.max_action_dim
+        self.hidden_dim = config.hidden_dim
+
+        # self.global_fuse = nn.Sequential(
+        #     nn.Linear(config.hidden_dim * 2, config.hidden_dim),
+        #     nn.GELU(),
+        #     nn.LayerNorm(config.hidden_dim),
+        # )
+
+        self.decoder_layers = nn.ModuleList(
+            [
+                ACEDecoderLayer(config)
+                for _ in range(4)  # 先用 2 层，后面可以试 4 层
+            ]
+        )
+
+        self.output_norm = nn.LayerNorm(config.hidden_dim)
+
+        self.out_mlp = nn.Sequential(
+            nn.Linear(config.hidden_dim, config.hidden_dim * 2),
+            nn.GELU(),
+            nn.Dropout(config.dropout),
+            nn.Linear(config.hidden_dim * 2, self.group_dim),
+        )
+
+    def forward(
+        self,
+        action_tokens: torch.Tensor,
+        global_embedding: torch.Tensor,
+        attention_mask: Optional[torch.Tensor] = None,
+    ) -> torch.Tensor:
+
+        # global_tokens = global_embedding.unsqueeze(1).expand_as(action_tokens)
+
+        # x = torch.cat(
+        #     [action_tokens, global_tokens],
+        #     dim=-1,
+        # )
+        x = action_tokens
+
+        # x = self.global_fuse(x)
+
+        for layer in self.decoder_layers:
+            x = layer(
+                x,
+                attention_mask=attention_mask,
+            )
+
+        x = self.output_norm(x)
+
+        reconstructed_groups = self.out_mlp(x)
+
+        return reconstructed_groups
+
 class ActionChunkEncoder(nn.Module):
-    """Action Chunk Encoder (ACE) with axial RoPE.
-
-    Encodes action chunks into compact embeddings using:
-    - grouped action tokens
-    - one sample-rate token at position 0
-    - axial RoPE over type-axis and time-axis
-
-    Args:
-        config: ACEConfig object containing model hyperparameters
-    """
+    """Action Chunk Encoder (ACE) with axial RoPE + temporal reconstruction decoder."""
 
     def __init__(self, config: ACEConfig):
         super().__init__()
         self.config = config
-
-        self.action_dim = config.action_dim
+        self.frozen_ace = config.frozen_ace
+        
         self.action_dim_padded = config.max_action_dim
         self.chunk_size = config.chunk_size
         self.group_size = config.group_size
@@ -384,11 +528,12 @@ class ActionChunkEncoder(nn.Module):
         # Input projection
         self.input_proj = nn.Linear(self.group_dim, config.hidden_dim)
 
-        # Use the same split logic as attention
+        # RoPE split
         head_dim = config.hidden_dim // config.num_attention_heads
         type_dim = head_dim // 2
         if type_dim % 2 != 0:
             type_dim -= 1
+
         time_dim = head_dim - type_dim
         if time_dim % 2 != 0:
             time_dim -= 1
@@ -404,40 +549,38 @@ class ActionChunkEncoder(nn.Module):
         self.time_dim = time_dim
 
         # Axial RoPE
-        # type ids only need 2 positions: {0: sample token, 1: action token}
         self.type_rope = RotaryPositionEmbedding(
             dim=self.type_dim,
             max_position=2,
             base=10000.0,
         )
-        # time ids cover action token order
+
         self.time_rope = RotaryPositionEmbedding(
             dim=self.time_dim,
             max_position=max(config.max_position_embeddings, self.num_groups),
             base=10000.0,
         )
 
-        # Transformer layers
-        self.layers = nn.ModuleList([ACELayer(config) for _ in range(config.num_hidden_layers)])
+        # Encoder transformer layers
+        self.layers = nn.ModuleList(
+            [ACELayer(config) for _ in range(config.num_hidden_layers)]
+        )
 
-        # Output projection
+        # Output
         self.output_norm = nn.LayerNorm(config.hidden_dim)
         self.output_proj = nn.Linear(config.hidden_dim, config.output_dim)
 
         # Token embeddings
         self.sample_rate_embed = nn.Embedding(50, config.hidden_dim)
-        self.token_type_embed = nn.Embedding(2, config.hidden_dim)  # 0=sample, 1=action
+        self.token_type_embed = nn.Embedding(2, config.hidden_dim)
+        self.tanh = nn.Tanh()
+
+        # Reconstruction decoder
+        self.action_decoder = ActionReconstructionHead(config)
 
     def _pad_actions(self, actions: torch.Tensor) -> torch.Tensor:
-        """Pad action dimensions to action_dim_padded.
-
-        Args:
-            actions: (B, chunk_size, action_dim)
-
-        Returns:
-            (B, chunk_size, action_dim_padded)
-        """
         current_dim = actions.shape[-1]
+
         if current_dim >= self.action_dim_padded:
             return actions[..., : self.action_dim_padded]
 
@@ -447,25 +590,25 @@ class ActionChunkEncoder(nn.Module):
             device=actions.device,
             dtype=actions.dtype,
         )
+
         return torch.cat([actions, padding], dim=-1)
 
     def _group_actions(self, actions: torch.Tensor) -> torch.Tensor:
-        """Group actions along chunk dimension.
-
-        Args:
-            actions: (B, chunk_size, action_dim_padded)
-
-        Returns:
-            (B, num_groups, group_dim)
-        """
         batch_size = actions.shape[0]
+
         actions = actions.view(
             batch_size,
             self.num_groups,
             self.group_size,
             self.action_dim_padded,
         )
-        actions = actions.view(batch_size, self.num_groups, self.group_dim)
+
+        actions = actions.view(
+            batch_size,
+            self.num_groups,
+            self.group_dim,
+        )
+
         return actions
 
     def _build_position_ids(
@@ -473,87 +616,130 @@ class ActionChunkEncoder(nn.Module):
         batch_size: int,
         device: torch.device,
     ) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
-        """Build type ids, time ids, and time mask.
 
-        Sequence:
-            [sample_token, action_0, action_1, ..., action_{N-1}]
-
-        Returns:
-            type_ids:  (B, N+1)
-            time_ids:  (B, N+1)
-            time_mask: (B, N+1), bool
-        """
         seq_len = self.num_groups + 1
 
-        # type ids: 0 for sample token, 1 for action tokens
-        type_ids = torch.zeros(batch_size, seq_len, dtype=torch.long, device=device)
+        type_ids = torch.zeros(
+            batch_size,
+            seq_len,
+            dtype=torch.long,
+            device=device,
+        )
         type_ids[:, 1:] = 1
 
-        # time ids: sample token gets 0 placeholder, action tokens get 0..N-1
-        time_ids = torch.zeros(batch_size, seq_len, dtype=torch.long, device=device)
-        action_time_ids = torch.arange(self.num_groups, dtype=torch.long, device=device)
+        time_ids = torch.zeros(
+            batch_size,
+            seq_len,
+            dtype=torch.long,
+            device=device,
+        )
+
+        action_time_ids = torch.arange(
+            self.num_groups,
+            dtype=torch.long,
+            device=device,
+        )
+
         time_ids[:, 1:] = action_time_ids.unsqueeze(0)
 
-        # time mask: sample token does NOT use time-axis RoPE
-        time_mask = torch.zeros(batch_size, seq_len, dtype=torch.bool, device=device)
+        time_mask = torch.zeros(
+            batch_size,
+            seq_len,
+            dtype=torch.bool,
+            device=device,
+        )
+
         time_mask[:, 1:] = True
 
         return type_ids, time_ids, time_mask
 
+    def decode_actions(self, action_tokens: torch.Tensor) -> torch.Tensor:
+        batch_size = action_tokens.shape[0]
+
+        reconstructed_groups = self.action_decoder(
+            action_tokens=action_tokens,
+            global_embedding=None,
+            attention_mask=None,
+        )
+
+        reconstructed_actions = reconstructed_groups.view(
+            batch_size,
+            self.num_groups,
+            self.group_size,
+            self.action_dim_padded,
+        )
+
+        reconstructed_actions = reconstructed_actions.reshape(
+            batch_size,
+            self.chunk_size,
+            self.action_dim_padded,
+        )
+
+        return reconstructed_actions
+    
     def forward(
         self,
         actions: torch.Tensor,
         sample_rate: torch.Tensor,
         attention_mask: Optional[torch.Tensor] = None,
-    ) -> torch.Tensor:
-        """Encode action chunks into compact embeddings.
+    ):
 
-        Args:
-            actions: (B, chunk_size, action_dim) or already padded to max_action_dim
-            sample_rate: (B,) integer ids, or scalar tensor / python int
-            attention_mask: optional attention mask broadcastable to (B, H, S, S)
-
-        Returns:
-            embedding: (B, output_dim)
-        """
         if not torch.is_tensor(sample_rate):
-            sample_rate = torch.tensor(sample_rate, device=actions.device)
+            sample_rate = torch.tensor(
+                sample_rate,
+                device=actions.device,
+            )
 
         if sample_rate.dim() == 0:
             sample_rate = sample_rate.unsqueeze(0).expand(actions.shape[0])
-        elif sample_rate.dim() == 1 and sample_rate.shape[0] == 1 and actions.shape[0] > 1:
+
+        elif (
+            sample_rate.dim() == 1
+            and sample_rate.shape[0] == 1
+            and actions.shape[0] > 1
+        ):
             sample_rate = sample_rate.expand(actions.shape[0])
 
         batch_size = actions.shape[0]
 
-        # Pad action dim if needed
+        # Save GT before grouping
+        # gt_actions = actions[..., : self.action_dim]
+        gt_actions = actions
+
+        # Pad action dim
         if actions.shape[-1] != self.action_dim_padded:
             actions = self._pad_actions(actions)
 
-        # Group actions -> (B, num_groups, group_dim)
-        actions = self._group_actions(actions)
+        # Group actions
+        grouped_actions = self._group_actions(actions)
 
-        # Project action groups -> (B, num_groups, hidden_dim)
-        action_hidden = self.input_proj(actions)
+        # Project action groups
+        action_hidden = self.input_proj(grouped_actions)
 
-        # Sample-rate token -> (B, 1, hidden_dim)
-        sample_token = self.sample_rate_embed(sample_rate.long()).unsqueeze(1)
+        # Sample-rate token
+        sample_token = self.sample_rate_embed(
+            sample_rate.long()
+        ).unsqueeze(1)
 
-        # Concat sequence: [sample_token, action_tokens]
-        hidden_states = torch.cat([sample_token, action_hidden], dim=1)
+        # Build sequence
+        hidden_states = torch.cat(
+            [sample_token, action_hidden],
+            dim=1,
+        )
 
         # Token type embedding
         type_ids, time_ids, time_mask = self._build_position_ids(
             batch_size=batch_size,
             device=actions.device,
         )
+
         hidden_states = hidden_states + self.token_type_embed(type_ids)
 
-        # Build axial RoPE tables
+        # RoPE
         cos_type, sin_type = self.type_rope.get_cos_sin_by_position_ids(type_ids)
         cos_time, sin_time = self.time_rope.get_cos_sin_by_position_ids(time_ids)
 
-        # Transformer
+        # Encoder
         for layer in self.layers:
             hidden_states = layer(
                 hidden_states=hidden_states,
@@ -565,11 +751,14 @@ class ActionChunkEncoder(nn.Module):
                 attention_mask=attention_mask,
             )
 
-        # Output projection
-        # hidden_states = self.output_norm(hidden_states)
-        # hidden_states = self.output_proj(hidden_states)
+        # Normalize hidden states as in your current version
+        hidden_states = hidden_states / (
+            hidden_states.abs().max(dim=-1, keepdim=True)[0] + 1e-8
+        )
 
-        # Use sample token output as final embedding
-        hidden_states = hidden_states / (hidden_states.abs().max(dim=-1, keepdim=True)[0] + 1e-8)
-        embedding = hidden_states[:, 1:, :]  # (B, output_dim)
-        return embedding
+        # Global embedding
+        embedding = hidden_states[:, 0, :]
+
+        # Local action tokens
+        action_tokens = hidden_states[:, 1:, :]
+        return action_tokens

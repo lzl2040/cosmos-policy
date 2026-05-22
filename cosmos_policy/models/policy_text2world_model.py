@@ -43,9 +43,6 @@ from cosmos_policy.conditioner import Text2WorldCondition
 from cosmos_policy.modules.cosmos_sampler import CosmosPolicySampler
 from cosmos_policy.modules.hybrid_edm_sde import HybridEDMSDE
 from cosmos_policy.experiments.robot.cosmos_utils import extract_action_chunk_from_latent_sequence
-from cosmos_policy.models.ace_vision import VisionEncoder
-from cosmos_policy.models.ace_action import ActionChunkEncoder, ACEConfig
-from cosmos_policy.models.ace import ACE
 
 def replace_latent_with_action_chunk(
     x0: torch.Tensor, action_chunk: torch.Tensor, action_indices: torch.Tensor
@@ -526,17 +523,22 @@ class CosmosPolicyDiffusionModel(BaseDiffusionModel):
         kendall_loss = edm_loss_B_C_T_H_W # prediction loss
         
         # action reconstruction loss
-        # action_shape = action_embeddings.shape[1:]
-        # pred_action_embeds = extract_action_chunk_from_latent_sequence(model_pred.x0, action_shape, action_indices)
+        action_shape = action_embeddings.shape[1:]
+        pred_action_embeds = extract_action_chunk_from_latent_sequence(model_pred.x0, action_shape, action_indices)
+        pred_action_embeds = pred_action_embeds.to(dtype=action_embeddings.dtype)
+        pred_action = self.ace.action_encoder.decode_actions(pred_action_embeds)  # [B, chunk_size, action_dim]
         # pred_action = self.action_decoder(pred_action_embeds)  # [B, chunk_size // group_size, action_dim]
         # pred_action = pred_action.view(pred_action.shape[0], pred_action.shape[1], self.action_group_size, -1) 
         # pred_action = pred_action.view(pred_action.shape[0], -1, pred_action.shape[-1])  # [B, chunk_size, action_dim]
-        # kendall_loss_action_mse_loss = ((pred_action - action_chunk) ** 2).mean()
-        # kendall_loss_action_l1_loss = torch.abs(pred_action - action_chunk).mean()
+        kendall_loss_action_mse_loss = ((pred_action - action_chunk) ** 2).mean()
+        kendall_loss_action_l1_loss = torch.abs(pred_action - action_chunk).mean()
         # print(f"Kendall loss action mse: {kendall_loss_action_mse_loss.item():.4f}, l1: {kendall_loss_action_l1_loss.item():.4f}") 
+        # action_embeddings_loss = ((pred_action_embeds - action_embeddings) ** 2).mean()
+        # print(f"Kendall loss action embedding mse: {action_embeddings_loss.item():.4f}")
+        # print(pred_action_embeds[0, 0, :5], action_embeddings[0, 0, :5])
         
-        kendall_loss_action_mse_loss = torch.tensor(0.0, device=x0_B_C_T_H_W.device)
-        kendall_loss_action_l1_loss = torch.tensor(0.0, device=x0_B_C_T_H_W.device)
+        # kendall_loss_action_mse_loss = torch.tensor(0.0, device=x0_B_C_T_H_W.device)
+        # kendall_loss_action_l1_loss = torch.tensor(0.0, device=x0_B_C_T_H_W.device)
         kendall_loss_state_mse_loss = torch.tensor(0.0, device=x0_B_C_T_H_W.device)
         kendall_loss_state_l1_loss = torch.tensor(0.0, device=x0_B_C_T_H_W.device)
 
@@ -749,7 +751,7 @@ class CosmosPolicyDiffusionModel(BaseDiffusionModel):
                 # self.tokenizer.get_latent_num_frames(_T),
                 # _H // self.tokenizer.spatial_compression_factor,
                 # _W // self.tokenizer.spatial_compression_factor,
-                9,
+                7,
                 28,
                 28
             ]

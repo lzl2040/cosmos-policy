@@ -41,7 +41,7 @@ def get_regular_param_group(models: List[nn.Module]):
             if p.requires_grad:
                 # 防止不同模型中参数名重复
                 param_dict[f"{id(model)}.{pn}"] = p
-    print(param_dict.keys())
+    # print(param_dict.keys())
     decay_params = [p for _, p in param_dict.items() if p.dim() >= 2]
     nodecay_params = [p for _, p in param_dict.items() if p.dim() < 2]
 

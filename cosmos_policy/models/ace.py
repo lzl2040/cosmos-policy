@@ -165,6 +165,11 @@ class VisionEncoder(nn.Module):
             }
         """
         device = next(self.parameters()).device
+        
+        B, C, T, H, W = images.shape
+        # print(f"Images:{images.shape}")
+        images = images.permute(0, 2, 1, 3, 4).contiguous()
+        images = images.view(B * T, C, H, W).to(dtype=torch.float32)  # treat time
 
         inputs = self.processor(images=images, return_tensors="pt")
         inputs = {
@@ -186,16 +191,15 @@ class VisionEncoder(nn.Module):
         cls_token = self.cls_projection(cls_token)  # [B, output_dim]
 
         # patch tokens -> 2D map
-        B, N, D = patch_tokens.shape
+        BT, N, D = patch_tokens.shape
         H_patch, W_patch = self._infer_patch_grid(N)
 
         patch_tokens_2d = self.patch_projection(patch_tokens)         # [B, N, D]
-        patch_tokens_2d = patch_tokens_2d.view(B, H_patch, W_patch, D)
+        patch_tokens_2d = patch_tokens_2d.view(BT, H_patch, W_patch, D)
         patch_tokens_2d = patch_tokens_2d.permute(0, 3, 1, 2).contiguous()  # [B, D, H_patch, W_patch]
 
         # bottleneck -> VAE-like feature
-        vae_feature_raw = self.bottleneck(patch_tokens_2d)  # [B, C_out, H_out, W_out]
-        # vae_feature = self.tanh(vae_feature)
+        vae_feature_raw = self.bottleneck(patch_tokens_2d)  # [BT, C_out, H_out, W_out]
         vae_feature = vae_feature_raw / (vae_feature_raw.abs().max(dim=-1, keepdim=True)[0] + 1e-8)
 
         # average pool -> token
@@ -203,9 +207,12 @@ class VisionEncoder(nn.Module):
 
         # fuse pooled token with original cls token
         final_token = self.fusion_head(cls_token, pooled_token)  # [B, output_dim]
-        final_token = final_token / (
-            final_token.abs().max(dim=-1, keepdim=True)[0] + 1e-8
-        )
+        
+        final_token = final_token.view(B, T, -1)  # reshape back to [B, T, output_dim]
+        vae_feature = vae_feature.view(B, T, self.vae_channels, self.vae_h, self.vae_w)  # [B, T, C_out, H_out, W_out]
+        cls_token = cls_token.view(B, T, -1)  # [B, T, output_dim]
+        pooled_token = pooled_token.view(B, T, -1)  # [B, T, C_out]
+        patch_tokens = patch_tokens.view(B, T, N, D)
 
         return {
             "final_token": final_token,

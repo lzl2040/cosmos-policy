@@ -135,6 +135,7 @@ class VisionEncoder(nn.Module):
             output_dim=output_dim,
         )
         self.vae_proj = nn.Linear(self.vae_channels, output_dim)
+        self.tanh = nn.Tanh()
 
     def _infer_patch_grid(self, num_patch_tokens: int) -> Tuple[int, int]:
         """
@@ -164,11 +165,6 @@ class VisionEncoder(nn.Module):
             }
         """
         device = next(self.parameters()).device
-        
-        B, C, T, H, W = images.shape
-        # print(f"Images:{images.shape}")
-        images = images.permute(0, 2, 1, 3, 4).contiguous()
-        images = images.view(B * T, C, H, W).to(dtype=torch.float32)  # treat time
 
         inputs = self.processor(images=images, return_tensors="pt")
         inputs = {
@@ -190,15 +186,16 @@ class VisionEncoder(nn.Module):
         cls_token = self.cls_projection(cls_token)  # [B, output_dim]
 
         # patch tokens -> 2D map
-        BT, N, D = patch_tokens.shape
+        B, N, D = patch_tokens.shape
         H_patch, W_patch = self._infer_patch_grid(N)
 
         patch_tokens_2d = self.patch_projection(patch_tokens)         # [B, N, D]
-        patch_tokens_2d = patch_tokens_2d.view(BT, H_patch, W_patch, D)
+        patch_tokens_2d = patch_tokens_2d.view(B, H_patch, W_patch, D)
         patch_tokens_2d = patch_tokens_2d.permute(0, 3, 1, 2).contiguous()  # [B, D, H_patch, W_patch]
 
         # bottleneck -> VAE-like feature
         vae_feature_raw = self.bottleneck(patch_tokens_2d)  # [B, C_out, H_out, W_out]
+        # vae_feature = self.tanh(vae_feature)
         vae_feature = vae_feature_raw / (vae_feature_raw.abs().max(dim=-1, keepdim=True)[0] + 1e-8)
 
         # average pool -> token
@@ -206,12 +203,9 @@ class VisionEncoder(nn.Module):
 
         # fuse pooled token with original cls token
         final_token = self.fusion_head(cls_token, pooled_token)  # [B, output_dim]
-        
-        final_token = final_token.view(B, T, -1)  # reshape back to [B, T, output_dim]
-        vae_feature = vae_feature.view(B, T, self.vae_channels, self.vae_h, self.vae_w)  # [B, T, C_out, H_out, W_out]
-        cls_token = cls_token.view(B, T, -1)  # [B, T, output_dim]
-        pooled_token = pooled_token.view(B, T, -1)  # [B, T, C_out]
-        patch_tokens = patch_tokens.view(B, T, N, D)
+        final_token = final_token / (
+            final_token.abs().max(dim=-1, keepdim=True)[0] + 1e-8
+        )
 
         return {
             "final_token": final_token,
@@ -281,11 +275,8 @@ class ACE(nn.Module):
             Normalized image embeddings of shape (B, projection_dim)
         """
         image_embeddings = self.vision_model(images)["final_token"]  # (B, projection_dim)
-        image_embeddings = self.image_ln(image_embeddings)
         # print(f"Image embeddings shape after vision model: {image_embeddings.shape}")
         image_embeddings = self.image_projection(image_embeddings)
-        # image_embeddings = F.normalize(image_embeddings, dim=-1)
-        # print(image_embeddings.shape)
         return image_embeddings
     
     def encode_actions(self, actions: torch.Tensor, sample_rate: int = 0) -> torch.Tensor:
@@ -298,11 +289,11 @@ class ACE(nn.Module):
         Returns:
             Normalized action embeddings of shape (B, projection_dim)
         """
-        action_embeddings = self.action_encoder(actions, sample_rate)  # (B, output_dim)
-        action_embeddings = self.action_ln(action_embeddings)
+        action_output = self.action_encoder(actions, sample_rate)
+        action_embeddings = action_output["embedding"]  # (B, output_dim)
+        recon_loss = action_output["recon_loss"]  # (B, chunk_size, action_dim)
         action_embeddings = self.action_projection(action_embeddings)
-        action_embeddings = F.normalize(action_embeddings, dim=-1)
-        return action_embeddings
+        return action_embeddings, recon_loss
     
     def compute_contrastive_loss(
         self,

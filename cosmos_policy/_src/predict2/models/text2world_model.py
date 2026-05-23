@@ -170,11 +170,11 @@ class DiffusionModel(ImaginaireModel):
         # vision_model_name: str = "/mnt/wangxiaofa/pt_weights/siglip2-base-patch16-224/"
         
         # for b200 81
-        # ace_pt_path = "/mnt/pvc/msra-training_data/weights/pt_ace/step_26k/mp_rank_00_model_states.pt"
+        ace_pt_path = "/mnt/pvc/msra-training_data/weights/pt_ace/0522_ace/step_6k/mp_rank_00_model_states.pt"
         vision_model_name: str = "/mnt/pvc/msra-training_data/weights/siglip2-base-patch16-224/"
         # for b200 03
         # 0522_ace(0520 in blob): fix action equal zero bug
-        ace_pt_path = "/mnt/pvc/robo_home/lzl_ckpts/ace_pt_weights/0522_ace/step_4k/mp_rank_00_model_states.pt"
+        # ace_pt_path = "/mnt/pvc/robo_home/lzl_ckpts/ace_pt_weights/0522_ace/step_4k/mp_rank_00_model_states.pt"
         vision_model_name = vision_model_name if os.path.isdir(vision_model_name) else "google/siglip2-base-patch16-224"
         
         self.ace = ACE(vision_model_name=vision_model_name).to(self.precision)
@@ -185,6 +185,11 @@ class DiffusionModel(ImaginaireModel):
             print("missing_keys:", missing_keys)
             print("unexpected_keys:", unexpected_keys)
             print(f"Load ace weights from:{ace_pt_path}")
+        for name, param in self.ace.named_parameters():
+            if "action_decoder" in name:
+                param.requires_grad = True
+            else:
+                param.requires_grad = False
 
         # 4. Set up loss options, including loss masking, loss reduce and loss scaling
         self.loss_reduce = getattr(config, "loss_reduce", "mean")

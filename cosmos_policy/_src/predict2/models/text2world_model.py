@@ -170,11 +170,11 @@ class DiffusionModel(ImaginaireModel):
         # vision_model_name: str = "/mnt/wangxiaofa/pt_weights/siglip2-base-patch16-224/"
         
         # for b200 81
-        ace_pt_path = "/mnt/pvc/msra-training_data/weights/pt_ace/0522_ace/step_6k/mp_rank_00_model_states.pt"
+        # ace_pt_path = "/mnt/pvc/msra-training_data/weights/pt_ace/0522_ace/step_6k/mp_rank_00_model_states.pt"
         vision_model_name: str = "/mnt/pvc/msra-training_data/weights/siglip2-base-patch16-224/"
         # for b200 03
         # 0522_ace(0520 in blob): fix action equal zero bug
-        # ace_pt_path = "/mnt/pvc/robo_home/lzl_ckpts/ace_pt_weights/0522_ace/step_4k/mp_rank_00_model_states.pt"
+        ace_pt_path = "/mnt/pvc/robo_home/lzl_ckpts/ace_pt_weights/0522_ace/step_9k/mp_rank_00_model_states.pt"
         vision_model_name = vision_model_name if os.path.isdir(vision_model_name) else "google/siglip2-base-patch16-224"
         
         self.ace = ACE(vision_model_name=vision_model_name).to(self.precision)
@@ -857,7 +857,7 @@ class DiffusionModel(ImaginaireModel):
                 _ema_state_dict[k.replace("net_ema.", "")] = v
             elif k.startswith("ace."):
                 _ace_state_dict[k.replace("ace.", "")] = v
-
+        # print(_ace_state_dict.keys())
         state_dict = _reg_state_dict
 
         if strict:

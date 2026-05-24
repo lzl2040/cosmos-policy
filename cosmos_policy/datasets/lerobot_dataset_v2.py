@@ -1388,7 +1388,6 @@ class MultiDatasetforDistTraining(torch.utils.data.Dataset):
         # save_to_json(self.stats, os.path.join("/home/cosmos/.cache/lerobot_data", f"{data_mix}_stats.json"))
         # save_to_json(self.stats, os.path.join("/mnt/wangxiaofa/robot_dataset/lerobot-format", f"{data_mix}_stats.json"))
         
-        
         # in fact, we do not use it, so just simply copy
         self.meta = ds_meta
         print(self.stats)
@@ -1623,11 +1622,11 @@ class MultiDatasetforDistTraining(torch.utils.data.Dataset):
         
         is_world_model_sample = False
         is_value_function_sample = False
-        p_world_model = 0.5
-        if random.random() < p_world_model:
-            is_world_model_sample = True
-        else:
-            is_world_model_sample = False
+        # p_world_model = 0.5
+        # if random.random() < p_world_model:
+        #     is_world_model_sample = True
+        # else:
+        #     is_world_model_sample = False
         
         # del item
         task_id = item["task_index"].item()
@@ -1653,6 +1652,7 @@ class MultiDatasetforDistTraining(torch.utils.data.Dataset):
         # prepare state and action
         item = self.prepare_action_state(item)
         # cosmos policy use min-max
+        # our use mean std
         item = self.norm_data_with_mean_std_ort6d(item)
         
         # unified the image keys

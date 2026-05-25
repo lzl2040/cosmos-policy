@@ -128,9 +128,10 @@ cosmos_predict2_2b_480p_libero = LazyDict(
                     ),
                 ),
                 # state_t=9,  # Latent temporal dim (blank, proprio, wrist, primary, action, future proprio, future wrist, future primary, value)
-                state_t = 8,
-                min_num_conditional_frames=3,  # 1 blank, 3 conditioning (proprio, wrist, primary)
-                max_num_conditional_frames=3,  # 1 blank, 3 conditioning (proprio, wrist, primary)
+                # state_t = 8,
+                state_t = 10, 
+                min_num_conditional_frames=5,  # 1 blank, 3 conditioning (proprio, wrist, primary)
+                max_num_conditional_frames=5,  # 1 blank, 3 conditioning (proprio, wrist, primary)
                 sigma_conditional=0.0,  # No noise on conditional latents
                 conditioning_strategy="frame_replace",
                 denoise_replace_gt_frames=True,
@@ -140,7 +141,8 @@ cosmos_predict2_2b_480p_libero = LazyDict(
                 # ),
                 
                 tokenizer=dict(
-                    chunk_duration=29,  # 1 blank + 36 images (4 proprio, 4 wrist image, 4 primary image, 4 secondary, 4 action, 4 future proprio, 4 future wrist, 4 future primary, 4 future secondary)
+                    # chunk_duration=29,  # 1 blank + 36 images (4 proprio, 4 wrist image, 4 primary image, 4 secondary, 4 action, 4 future proprio, 4 future wrist, 4 future primary, 4 future secondary)
+                    chunk_duration=37,
                 ),
                 ema=dict(
                     enabled=False,

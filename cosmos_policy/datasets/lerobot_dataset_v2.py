@@ -889,6 +889,7 @@ class LeRobotDataset(torch.utils.data.Dataset):
             # )
             frames = decode_video_frames(video_path, query_ts, self.tolerance_s, "pyav", 
                                          return_type="image", worker_count=10)
+            # print(np.array(frames[0]).shape)
             # frames = decode_video_frames(video_path, query_ts, self.tolerance_s, "torchcodec", 
             #                              return_type="image", worker_count=10)
             # print(vid_key, len(frames), len(query_ts))
@@ -1654,6 +1655,7 @@ class MultiDatasetforDistTraining(torch.utils.data.Dataset):
         # cosmos policy use min-max
         # our use mean std
         item = self.norm_data_with_mean_std_ort6d(item)
+        # item = self.norm_data_with_min_max_ort6d(item)
         
         # unified the image keys
         
@@ -1687,13 +1689,24 @@ class MultiDatasetforDistTraining(torch.utils.data.Dataset):
         IMAGE_WRIST = "observation.images.wrist"
         CURRENT_IDX = 0
         FUTURE_IDX = -1
+        # Get proprio values for sample_dict (even though they're not used as latent placeholders)
+        proprio = item[OBS_ROBOT][CURRENT_IDX] if self.use_proprio else torch.zeros(self.max_state_dim)
+        future_proprio = item[OBS_ROBOT][FUTURE_IDX] if self.use_proprio else torch.zeros(self.max_state_dim)
         first_input_image = np.expand_dims(np.zeros_like(item[IMAGE_PRIMARY][CURRENT_IDX]), axis=0)
         image_list.append(first_input_image)
         current_sequence_idx += 1
         
-        # NOTE: proprio is no longer used as input or prediction target
-        # proprio values are removed from the latent sequence
         current_proprio_latent_idx = -1
+        # current state
+        if self.use_proprio:
+            proprio = item[OBS_ROBOT][CURRENT_IDX]
+            # Proprio values will be injected into latent diffusion sequence later
+            # For now just add blank image
+            blank_image = np.zeros_like(item[IMAGE_PRIMARY][CURRENT_IDX])
+            blank_image = duplicate_array(blank_image, total_num_copies=self.num_duplicates_per_image)
+            image_list.append(blank_image)
+            current_proprio_latent_idx = current_sequence_idx
+            current_sequence_idx += 1
         
         if self.use_wrist_images:
             wrist_image = item[IMAGE_WRIST][CURRENT_IDX]
@@ -1730,14 +1743,18 @@ class MultiDatasetforDistTraining(torch.utils.data.Dataset):
         current_sequence_idx += 1
         
         # future state
-        
-        # NOTE: future_proprio is no longer used as prediction target
         future_proprio_latent_idx = -1
+        # Add future proprio
+        if self.use_proprio:
+            future_proprio = item[OBS_ROBOT][FUTURE_IDX]
+            # Not using proprio image; proprio values will be injected into latent diffusion sequence later
+            # For now just add blank image
+            blank_image = np.zeros_like(item[IMAGE_PRIMARY][FUTURE_IDX])
+            blank_image = duplicate_array(blank_image, total_num_copies=self.num_duplicates_per_image)
+            image_list.append(blank_image)
+            future_proprio_latent_idx = current_sequence_idx
+            current_sequence_idx += 1
         
-        # Get proprio values for sample_dict (even though they're not used as latent placeholders)
-        proprio = item[OBS_ROBOT][CURRENT_IDX] if self.use_proprio else torch.zeros(self.max_state_dim)
-        future_proprio = item[OBS_ROBOT][FUTURE_IDX] if self.use_proprio else torch.zeros(self.max_state_dim)
-
         # Add future wrist image
         if self.use_wrist_images:
             future_wrist_image = item[IMAGE_WRIST][FUTURE_IDX]

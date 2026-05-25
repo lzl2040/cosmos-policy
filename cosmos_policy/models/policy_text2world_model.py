@@ -493,6 +493,20 @@ class CosmosPolicyDiffusionModel(BaseDiffusionModel):
             action_embeddings,
             action_indices=action_indices,
         )
+        # Proprio
+        if torch.all(current_proprio_indices != -1):  # -1 indicates proprio is not used
+            x0_B_C_T_H_W = replace_latent_with_proprio(
+                x0_B_C_T_H_W,
+                proprio,
+                proprio_indices=current_proprio_indices,
+            )
+        # Future proprio
+        if torch.all(future_proprio_indices != -1):  # -1 indicates future proprio is not used
+            x0_B_C_T_H_W = replace_latent_with_proprio(
+                x0_B_C_T_H_W,
+                future_proprio,
+                proprio_indices=future_proprio_indices,
+            )
         
         condition.orig_gt_frames = condition.gt_frames.clone()  # Keep a backup of the original gt_frames
         condition.gt_frames = replace_latent_with_action_chunk(
@@ -535,7 +549,11 @@ class CosmosPolicyDiffusionModel(BaseDiffusionModel):
         # print(f"Kendall loss action mse: {kendall_loss_action_mse_loss.item():.4f}, l1: {kendall_loss_action_l1_loss.item():.4f}") 
         # action_embeddings_loss = ((pred_action_embeds - action_embeddings) ** 2).mean()
         # print(f"Kendall loss action embedding mse: {action_embeddings_loss.item():.4f}")
-        # print(pred_action_embeds[0, 0, :5], action_embeddings[0, 0, :5])
+        # print(pred_action[0, 0, :5], action_chunk[0, 0, :5])
+        
+        # print("dim 3-9 mse:", mse_3_10.item())
+        # print("dim 3-9 l1:", l1_3_10.item())
+        # print("dim 3-9 rmse:", rmse_3_10.item())
         
         # kendall_loss_action_mse_loss = torch.tensor(0.0, device=x0_B_C_T_H_W.device)
         # kendall_loss_action_l1_loss = torch.tensor(0.0, device=x0_B_C_T_H_W.device)

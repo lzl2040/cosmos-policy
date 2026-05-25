@@ -163,6 +163,8 @@ class DiffusionModel(ImaginaireModel):
                 self.sigma_data, config.rectified_flow_t_scaling_factor, config.rectified_flow_loss_weight_uniform
             )
         )
+        
+        ### my add ###
         # ace_pt_path = "/home/cosmos/.cache/cosmos_policy/libero/ace_libero_decoder/step_6k/mp_rank_00_model_states.pt"
         # vision_model_name: str = "/home/cosmos/.cache/siglip2-base-patch16-224"
         
@@ -185,11 +187,21 @@ class DiffusionModel(ImaginaireModel):
             print("missing_keys:", missing_keys)
             print("unexpected_keys:", unexpected_keys)
             print(f"Load ace weights from:{ace_pt_path}")
-        for name, param in self.ace.named_parameters():
-            if "action_decoder" in name:
-                param.requires_grad = True
-            else:
-                param.requires_grad = False
+        # for name, param in self.ace.named_parameters():
+        #     if "action_decoder" in name:
+        #         param.requires_grad = True
+        #     else:
+        #         param.requires_grad = False
+        
+        ### my add ###
+        
+        # 3. tokenizer
+        with misc.timer("DiffusionModel: set_up_tokenizer"):
+            self.tokenizer: BaseVAE = lazy_instantiate(config.tokenizer)
+            assert self.tokenizer.latent_ch == self.config.state_ch, (
+                f"latent_ch {self.tokenizer.latent_ch} != state_shape {self.config.state_ch}"
+            )
+        
 
         # 4. Set up loss options, including loss masking, loss reduce and loss scaling
         self.loss_reduce = getattr(config, "loss_reduce", "mean")
@@ -335,8 +347,8 @@ class DiffusionModel(ImaginaireModel):
     def on_train_start(self, memory_format: torch.memory_format = torch.preserve_format) -> None:
         if self.config.ema.enabled:
             self.net_ema.to(dtype=torch.float32)
-        # if hasattr(self.tokenizer, "reset_dtype"):
-        #     self.tokenizer.reset_dtype()
+        if hasattr(self.tokenizer, "reset_dtype"):
+            self.tokenizer.reset_dtype()
         self.net = self.net.to(memory_format=memory_format, **self.tensor_kwargs)
 
         if hasattr(self.config, "use_torch_compile") and self.config.use_torch_compile:  # compatible with old config
@@ -754,10 +766,13 @@ class DiffusionModel(ImaginaireModel):
         # Latent state
         # raw_state: [8, 3, 37, 224, 224]
         raw_state = data_batch[self.input_image_key if is_image_batch else self.input_data_key]
-        output_dict = self.encode(raw_state)
-        latent_state = output_dict["vae_feature"].contiguous().float() # [8, 9, 16, 28, 28]
-        # latent_state = self.encode(raw_state).contiguous().float() # [4, 16, 9, 28, 28] # vae
-        latent_state = latent_state.permute(0, 2, 1, 3, 4)  # [4, 16, 9, 28, 28]
+        # for ace
+        # output_dict = self.encode(raw_state)
+        # latent_state = output_dict["vae_feature"].contiguous().float() # [8, 9, 16, 28, 28]
+        # latent_state = latent_state.permute(0, 2, 1, 3, 4)  # [4, 16, 9, 28, 28]
+
+        # raw cosmos
+        latent_state = self.encode(raw_state).contiguous().float() # [4, 16, 9, 28, 28] # vae 
 
         # Condition
         # print(self.conditioner, self.config.conditioner)
@@ -799,15 +814,14 @@ class DiffusionModel(ImaginaireModel):
             else:
                 assert data_batch[input_key].dtype == torch.uint8, "Video data is not in uint8 format."
                 # print(torch.max(data_batch[input_key]))
-                # data_batch[input_key] = data_batch[input_key].to(**self.tensor_kwargs) / 127.5 - 1.0
-                data_batch[input_key] = data_batch[input_key].to(**self.tensor_kwargs) # 0-255
+                data_batch[input_key] = data_batch[input_key].to(**self.tensor_kwargs) / 127.5 - 1.0
                 data_batch[IS_PREPROCESSED_KEY] = True
 
-            # expected_length = self.tokenizer.get_pixel_num_frames(self.config.state_t)
-            # original_length = data_batch[input_key].shape[2]
-            # assert original_length == expected_length, (
-            #     f"Input video length doesn't match expected length specified by state_t: {original_length} != {expected_length}"
-            # )
+            expected_length = self.tokenizer.get_pixel_num_frames(self.config.state_t)
+            original_length = data_batch[input_key].shape[2]
+            assert original_length == expected_length, (
+                f"Input video length doesn't match expected length specified by state_t: {original_length} != {expected_length}"
+            )
 
     def _augment_image_dim_inplace(self, data_batch: dict[str, Tensor], input_key: str = None) -> None:
         input_key = self.input_image_key if input_key is None else input_key
@@ -1022,14 +1036,12 @@ class DiffusionModel(ImaginaireModel):
 
     @torch.no_grad()
     def encode(self, state: torch.Tensor) -> torch.Tensor:
-        # print(state.device)
-        # return self.tokenizer.encode(state) * self.sigma_data
+        return self.tokenizer.encode(state) * self.sigma_data
         # return self.ace.vision_model(state)
-        return self.ace.vision_model(state)
 
-    # @torch.no_grad()
-    # def decode(self, latent: torch.Tensor) -> torch.Tensor:
-        # return self.tokenizer.decode(latent / self.sigma_data)
+    @torch.no_grad()
+    def decode(self, latent: torch.Tensor) -> torch.Tensor:
+        return self.tokenizer.decode(latent / self.sigma_data)
 
     def get_video_height_width(self) -> Tuple[int, int]:
         return VIDEO_RES_SIZE_INFO[self.config.resolution]["9,16"]

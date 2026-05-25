@@ -1687,9 +1687,9 @@ class MultiDatasetforDistTraining(torch.utils.data.Dataset):
         IMAGE_WRIST = "observation.images.wrist"
         CURRENT_IDX = 0
         FUTURE_IDX = -1
-        # first_input_image = np.expand_dims(np.zeros_like(item[IMAGE_PRIMARY][CURRENT_IDX]), axis=0)
-        # image_list.append(first_input_image)
-        # current_sequence_idx += 1
+        first_input_image = np.expand_dims(np.zeros_like(item[IMAGE_PRIMARY][CURRENT_IDX]), axis=0)
+        image_list.append(first_input_image)
+        current_sequence_idx += 1
         
         # NOTE: proprio is no longer used as input or prediction target
         # proprio values are removed from the latent sequence

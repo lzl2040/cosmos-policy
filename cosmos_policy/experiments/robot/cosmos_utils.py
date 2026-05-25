@@ -35,6 +35,7 @@ from filelock import Timeout as FileLockTimeout
 from huggingface_hub import snapshot_download
 from PIL import Image
 from torch.multiprocessing import Event, Process, Queue
+from scipy.spatial.transform import Rotation
 
 from cosmos_policy._src.predict2.inference.get_t5_emb import get_text_embedding
 from cosmos_policy._src.predict2.utils.model_loader import load_model_from_checkpoint
@@ -47,7 +48,8 @@ DATE = time.strftime("%Y_%m_%d")
 DATE_TIME = time.strftime("%Y_%m_%d-%H_%M_%S")
 DEVICE = torch.device("cuda:0") if torch.cuda.is_available() else torch.device("cpu")
 COSMOS_IMAGE_SIZE = 224  # Standard image size expected by Cosmos policies
-COSMOS_TEMPORAL_COMPRESSION_FACTOR = 4
+# COSMOS_TEMPORAL_COMPRESSION_FACTOR = 4
+COSMOS_TEMPORAL_COMPRESSION_FACTOR = 1
 
 # Initialize global T5 text embeddings cache (to be filled later)
 t5_text_embeddings_cache = {}
@@ -57,6 +59,54 @@ t5_text_embeddings_newly_computed = False  # Global boolean - tracks whether new
 # Configure numpy print settings - print to 3 decimals
 np.set_printoptions(formatter={"float": lambda x: "{0:0.3f}".format(x)})
 
+
+
+def ort6d_to_euler(ort6d, seq='xyz', degrees=False):
+    """
+    将 ort6d (6D rotation representation) 转换为欧拉角
+    
+    ort6d 格式：旋转矩阵前两列按行优先flatten
+    ort6d = R[:, 0:2].flatten() = [R[0,0], R[0,1], R[1,0], R[1,1], R[2,0], R[2,1]]
+    
+    支持两种输入格式：
+    - 单个旋转: shape (6,) -> 输出 (3,)
+    - 批量旋转: shape (N, 6) -> 输出 (N, 3)
+    
+    Args:
+        ort6d: shape (6,) 或 (N, 6)
+        seq: 欧拉角的顺序，默认 'xyz'
+        degrees: 是否输出角度值，默认 False (输出弧度)
+    
+    Returns:
+        欧拉角: shape (3,) 或 (N, 3)
+    """
+    ort6d = np.array(ort6d)
+    original_shape = ort6d.shape
+    
+    # 如果是单个旋转 (6,)，转换为 (1, 6) 处理
+    if ort6d.ndim == 1:
+        ort6d = ort6d.reshape(1, 6)
+    
+    # 批量恢复旋转矩阵的前两列
+    # ort6d[:, 0], ort6d[:, 2], ort6d[:, 4] 是第一列
+    # ort6d[:, 1], ort6d[:, 3], ort6d[:, 5] 是第二列
+    col0 = np.stack([ort6d[:, 0], ort6d[:, 2], ort6d[:, 4]], axis=1)  # shape (N, 3)
+    col1 = np.stack([ort6d[:, 1], ort6d[:, 3], ort6d[:, 5]], axis=1)  # shape (N, 3)
+    
+    # 第三列通过叉积得到
+    col2 = np.cross(col0, col1)  # shape (N, 3)
+    
+    # 构建旋转矩阵 shape (N, 3, 3)
+    rotation_matrix = np.stack([col0, col1, col2], axis=2)
+    
+    # 转换为欧拉角
+    rotation = Rotation.from_matrix(rotation_matrix)
+    euler = rotation.as_euler(seq, degrees=degrees)
+    
+    # 如果原始输入是单个旋转，返回 (3,)
+    if len(original_shape) == 1:
+        return euler[0]
+    return euler
 
 def get_latent_indices_from_model_config(model):
     """
@@ -648,6 +698,17 @@ def extract_value_from_latent_sequence(output_latent: torch.Tensor, value_indice
     final_value = torch.mean(flat_value_latent, dim=1)
     return final_value
 
+def unnormalize_actions_with_mean_std(actions: np.ndarray, dataset_stats: dict, scale_multiplier: float = 1.0, max_action_dim = 15):
+    actions_mean = np.array(dataset_stats["action"]["mean"])
+    actions_std = np.array(dataset_stats["action"]["std"])
+    pad_width = max_action_dim - actions_mean.shape[0]
+    if pad_width > 0:
+        actions_mean = np.pad(actions_mean, (0, pad_width), mode='constant', constant_values=0)
+        actions_std = np.pad(actions_std, (0, pad_width), mode='constant', constant_values=1)
+    # Reshape actions from (B, chunk_size, action_dim) to (B * chunk_size, action_dim)
+    original_shape = actions.shape
+    actions[:, :, :3] = actions[:, :, :3] * actions_std[:3] + actions_mean[:3]
+    return actions
 
 def unnormalize_actions(actions: np.ndarray, dataset_stats: dict, scale_multiplier: float = 1.0, max_action_dim = 15):
     """
@@ -682,6 +743,20 @@ def unnormalize_actions(actions: np.ndarray, dataset_stats: dict, scale_multipli
     actions = actions.reshape(original_shape)
     return actions
 
+def rescale_proprio_with_mean_std(proprio, dataset_stats, non_negative_only=False, scale_multiplier=1.0, max_dim = 15):
+    arr = proprio
+    # curr_min = dataset_stats["proprio_min"]
+    # curr_max = dataset_stats["proprio_max"]
+    curr_mean = np.array(dataset_stats["observation.state"]["mean"])
+    curr_std = np.array(dataset_stats["observation.state"]["std"])
+    # print(curr_min)
+    pad_width = max_dim - curr_mean.shape[0]
+    if pad_width > 0:
+        curr_mean = np.pad(curr_mean, (0, pad_width), mode='constant', constant_values=0)
+        curr_std = np.pad(curr_std, (0, pad_width), mode='constant', constant_values=1)
+    
+    arr[:3] = (arr[:3] - curr_mean[:3]) / (curr_std[:3] + 1e-8)
+    return arr
 
 def rescale_proprio(proprio, dataset_stats, non_negative_only=False, scale_multiplier=1.0, max_dim = 15):
     """
@@ -984,27 +1059,22 @@ def get_action(
             if pad_width > 0:
                 proprio = np.pad(proprio, (0, pad_width), mode='constant', constant_values=0)
             if cfg.normalize_proprio:
-                proprio = rescale_proprio(proprio, dataset_stats, non_negative_only=False, 
+                # rescale_proprio
+                proprio = rescale_proprio_with_mean_std(proprio, dataset_stats, non_negative_only=False, 
                                           scale_multiplier=1.0, max_dim = cfg.max_state_dim)
 
         # Build the raw image sequence that will be fed to the model (and the VAE tokenizer)
         image_sequence = []
         current_sequence_idx = 0  # Used to track which index in the sequence of images we are on
-
+        current_proprio_latent_idx = -1
+        future_proprio_latent_idx = -1
+        
         # Add blank placeholder image (special placeholder for 1+T temporal VAE compression)
         primary_image = all_camera_images[IMAGE_IDX]
         blank_image = np.zeros_like(primary_image)
-        image_sequence.append(np.expand_dims(np.zeros_like(blank_image), axis=0))
-        current_sequence_idx += 1
-
-        # Add blank placeholder images for robot proprioceptive state (proprio will be injected into latent later)
-        if cfg.use_proprio:
-            blank_image_duplicated = duplicate_array(
-                blank_image.copy(), total_num_copies=COSMOS_TEMPORAL_COMPRESSION_FACTOR
-            )
-            image_sequence.append(blank_image_duplicated)
-            current_proprio_latent_idx = current_sequence_idx
-            current_sequence_idx += 1
+        blank_image_duplicated = duplicate_array(
+            blank_image.copy(), total_num_copies=COSMOS_TEMPORAL_COMPRESSION_FACTOR
+        )
 
         # Add current wrist image(s)
         wrist_image, wrist_image2 = None, None
@@ -1046,12 +1116,7 @@ def get_action(
         image_sequence.append(blank_image_duplicated.copy())
         action_latent_idx = current_sequence_idx
         current_sequence_idx += 1
-
-        # Add blank placeholder images for future proprioceptive state (future proprio will be injected into latent later)
-        if cfg.use_proprio:
-            image_sequence.append(blank_image_duplicated.copy())
-            future_proprio_latent_idx = current_sequence_idx
-            current_sequence_idx += 1
+        
         # Add placeholders for the future wrist image(s) - copies of the current wrist image(s)
         if cfg.use_wrist_image:
             image_sequence.append(wrist_image_duplicated.copy())
@@ -1074,12 +1139,6 @@ def get_action(
                 current_sequence_idx += 1
             else:
                 future_image2_latent_idx = -1
-
-        # print(current_sequence_idx)
-        # Add placeholder for the value (value will be injected into latent later)
-        # image_sequence.append(blank_image_duplicated.copy())
-        # value_latent_idx = current_sequence_idx
-        # current_sequence_idx += 1
         
         value_latent_idx = -1
         
@@ -1091,15 +1150,18 @@ def get_action(
         raw_image_sequence = np.tile(raw_image_sequence, (batch_size, 1, 1, 1, 1))  # (1, T, H, W, C) -> (B, T, H, W, C)
         raw_image_sequence = np.transpose(raw_image_sequence, (0, 4, 1, 2, 3))  # (B, T, H, W, C) -> (B, C, T, H, W)
         raw_image_sequence = torch.from_numpy(raw_image_sequence).to(dtype=torch.uint8).to(device)
-        # print(raw_image_sequence.shape) # torch.Size([1, 3, 29, 224, 224])
+        # print(raw_image_sequence.shape) # 1 3 7 224 224
         # print(torch.max(raw_image_sequence), torch.min(raw_image_sequence))
         if cfg.use_proprio:
             # Convert proprio to tensor so that it can be injected into latent later
             proprio_tensor = (
                 torch.from_numpy(proprio).reshape(batch_size, -1).to(dtype=torch.bfloat16).to(device)
             )  # (B, proprio_dim)
-            print(torch.max(proprio_tensor), torch.min(proprio_tensor))
+            # print(torch.max(proprio_tensor), torch.min(proprio_tensor))
         data_batch = {
+            "sample_rate": torch.tensor(
+                [20] * batch_size, dtype=torch.bfloat16
+            ).to(device),
             "dataset_name": "video_data",
             "video": raw_image_sequence,  # (B, C, T, H, W)
             "t5_text_embeddings": text_embedding.repeat(batch_size, 1, 1).to(dtype=torch.bfloat16).to(device),
@@ -1109,7 +1171,8 @@ def get_action(
             "padding_mask": torch.zeros(
                 (batch_size, 1, COSMOS_IMAGE_SIZE, COSMOS_IMAGE_SIZE), dtype=torch.bfloat16
             ).to(device),  # Padding mask (assume no padding here)
-            "num_conditional_frames": model.config.min_num_conditional_frames,  # Number of latent frames used as conditioning
+            # "num_conditional_frames": model.config.min_num_conditional_frames,  # Number of latent frames used as conditioning
+            "num_conditional_frames": 3, 
             "proprio": proprio_tensor if cfg.use_proprio else None,
             # Specify the indices of various elements in the latent diffusion sequence
             "current_proprio_latent_idx": (
@@ -1178,30 +1241,47 @@ def get_action(
             use_variance_scale=cfg.use_variance_scale,  # Whether to vary the magnitude of the initial noise - increases diversity slightly in generations
             return_orig_clean_latent_frames=True,  # Return the original (pre-injection) latent frames - needed for future image visualizations
         )  # (B, C'=16, T', H'=28, W'=28)
-
+        
         # Extract the predicted action chunk from the generated sample
         action_indices = torch.full(
             (batch_size,), action_latent_idx, dtype=torch.int64, device=generated_latent_with_action.device
         )
-        actions = (
+        
+        action_shape = (4, 768)
+        pred_action_embeds = (
             extract_action_chunk_from_latent_sequence(
-                # generated_latent_with_action, action_shape=(cfg.chunk_size, ACTION_DIM), action_indices=action_indices
-                generated_latent_with_action, action_shape=(cfg.chunk_size, cfg.max_action_dim), action_indices=action_indices
+                # generated_latent_with_action, action_shape=(cfg.chunk_size, cfg.max_action_dim), action_indices=action_indices
+                generated_latent_with_action, action_shape=action_shape, action_indices=action_indices
             )
             .to(torch.float32)
-            .cpu()
-            .numpy()
+            # .cpu()
+            # .numpy()
         )
+        # pred_action = model.action_decoder(pred_action_embeds)  # [B, chunk_size // group_size, action_dim]
+        # pred_action = pred_action.view(pred_action.shape[0], pred_action.shape[1], model.action_group_size, -1) 
+        # actions = pred_action.view(pred_action.shape[0], -1, pred_action.shape[-1])  # [B, chunk_size, action_dim]
+        actions = model.ace.action_encoder.decode_actions(pred_action_embeds)
+        actions = actions.to(torch.float32).cpu().numpy()
+        euler = ort6d_to_euler(actions[0, :, 3: 3 + 6])
+        xyz = actions[0, :, :3]
+        gripper = actions[0, :, 3 + 6: 3 + 6 + 1]
+        actions = np.concatenate([xyz, euler, gripper], axis=-1)[np.newaxis, ...]  # (1, chunk_size, 10)
+        
+        # actions = actions[:, :, :7]
+        
+        # print(actions.shape) # 1 4 128
 
         # Unnormalize actions back to original dataset scale
         if cfg.unnormalize_actions:
-            actions = unnormalize_actions(actions, dataset_stats, max_action_dim=cfg.max_action_dim)
+            # unnormalize_actions
+            actions = unnormalize_actions_with_mean_std(actions, dataset_stats, max_action_dim=cfg.max_action_dim)
 
         # print(actions.shape) # B chunk_size action_dim
         actions = actions[:, :, :ACTION_DIM]
         
         # If generating future state and value in parallel with the actions (instead of autoregressively),
         # extract future state and value predictions from the generated sample now
+        generate_future_state_and_value_in_parallel = False
         if generate_future_state_and_value_in_parallel:
             # Get indices in the generated sample to replace with the original (pre-injection) latent frames so that VAE decoding produces correct images
             if cfg.suite == "libero":

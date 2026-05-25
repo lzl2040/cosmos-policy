@@ -530,135 +530,9 @@ def run_episode(
                         )
                         return_dict["actions"] = action_return_dict["actions"]
                         actions_by_depth.append(return_dict["actions"])
-
-                        if cfg.ar_future_prediction:
-                            # Autoregressively query model to get future state prediction
-                            start_time = time.time()
-                            future_state_return_dict = get_future_state_prediction(
-                                cfg,
-                                model=planning_model if planning_model is not None else model,
-                                data_batch=action_return_dict["data_batch"],
-                                generated_latent_with_action=action_return_dict["generated_latent"],
-                                orig_clean_latent_frames=action_return_dict["orig_clean_latent_frames"],
-                                future_proprio_latent_idx=action_return_dict["latent_indices"][
-                                    "future_proprio_latent_idx"
-                                ],
-                                future_wrist_image_latent_idx=action_return_dict["latent_indices"][
-                                    "future_wrist_image_latent_idx"
-                                ],
-                                future_wrist_image2_latent_idx=action_return_dict["latent_indices"][
-                                    "future_wrist_image2_latent_idx"
-                                ],
-                                future_image_latent_idx=action_return_dict["latent_indices"]["future_image_latent_idx"],
-                                future_image2_latent_idx=action_return_dict["latent_indices"][
-                                    "future_image2_latent_idx"
-                                ],
-                                seed=cfg.seed + query_idx,
-                                randomize_seed=cfg.randomize_seed,
-                                num_denoising_steps_future_state=cfg.num_denoising_steps_future_state,
-                                use_ensemble_future_state_predictions=cfg.use_ensemble_future_state_predictions,
-                                num_future_state_predictions_in_ensemble=cfg.num_future_state_predictions_in_ensemble,
-                                future_state_ensemble_aggregation_scheme=cfg.future_state_ensemble_aggregation_scheme,
-                            )
-                            query_time = time.time() - start_time
-                            log_message(
-                                f"Query {query_idx + 1}/{num_queries}: Future state prediction query time = {query_time:.3f} sec",
-                                log_file,
-                            )
-                            return_dict["future_image_predictions"] = future_state_return_dict[
-                                "future_image_predictions"
-                            ]
-                            future_image_predictions_by_depth.append(return_dict["future_image_predictions"])
-
-                        else:
-                            return_dict["future_image_predictions"] = action_return_dict["future_image_predictions"]
-
-                        if cfg.ar_value_prediction:
-                            # Autoregressively query model to get value prediction
-                            start_time = time.time()
-                            value_return_dict = get_value_prediction(
-                                cfg,
-                                model=planning_model if planning_model is not None else model,
-                                data_batch=action_return_dict["data_batch"],
-                                future_state_samples_list=future_state_return_dict["future_state_samples_list"],
-                                seed=cfg.seed + query_idx,
-                                randomize_seed=cfg.randomize_seed,
-                                num_denoising_steps_value=cfg.num_denoising_steps_value,
-                                use_ensemble_value_predictions=cfg.use_ensemble_value_predictions,
-                                num_value_predictions_in_ensemble=cfg.num_value_predictions_in_ensemble,
-                            )
-                            query_time = time.time() - start_time
-                            log_message(
-                                f"Query {query_idx + 1}/{num_queries}: Value prediction query time = {query_time:.3f} sec",
-                                log_file,
-                            )
-                            return_dict["value_prediction"] = value_return_dict["value_prediction"]
-                            value_predictions_by_depth.append(return_dict["value_prediction"])
-                            log_message(
-                                f"Query {query_idx + 1}/{num_queries}: Value prediction: {return_dict['value_prediction']:.4f}",
-                                log_file,
-                            )
-                        elif cfg.ar_qvalue_prediction:
-                            # Autoregressively query model to get Q-value prediction
-                            start_time = time.time()
-                            value_return_dict = get_qvalue_prediction(
-                                cfg,
-                                model=planning_model if planning_model is not None else model,
-                                data_batch=action_return_dict["data_batch"],
-                                action_sample=action_return_dict["generated_latent"],
-                                seed=cfg.seed + query_idx,
-                                randomize_seed=cfg.randomize_seed,
-                                num_denoising_steps_value=cfg.num_denoising_steps_value,
-                                use_ensemble_value_predictions=cfg.use_ensemble_value_predictions,
-                                num_value_predictions_in_ensemble=cfg.num_value_predictions_in_ensemble,
-                            )
-                            query_time = time.time() - start_time
-                            log_message(
-                                f"Query {query_idx + 1}/{num_queries}: Value prediction query time = {query_time:.3f} sec",
-                                log_file,
-                            )
-                            return_dict["value_prediction"] = value_return_dict["value_prediction"]
-                            value_predictions_by_depth.append(return_dict["value_prediction"])
-                            log_message(
-                                f"Query {query_idx + 1}/{num_queries}: Value prediction: {return_dict['value_prediction']:.4f}",
-                                log_file,
-                            )
-                        else:
-                            return_dict["value_prediction"] = action_return_dict["value_prediction"]
-                            value_predictions_by_depth.append(return_dict["value_prediction"])
-
-                        return_dict["future_image_predictions_by_depth"] = future_image_predictions_by_depth
-                        return_dict["value_predictions_by_depth"] = value_predictions_by_depth
-                        return_dict["actions_by_depth"] = actions_by_depth
-                        query_results.append(return_dict)
-
-                # Print all value predictions
-                log_message(f"t={t}: Current base seed: {base_seed}", log_file)
-                for query_idx, return_dict in enumerate(query_results):
-                    predicted_value = return_dict["value_prediction"]
-                    log_message(
-                        f"Query {query_idx + 1}/{num_queries} (seed {cfg.seed + query_idx}): Predicted value = {predicted_value:.4f}",
-                        log_file,
-                    )
-                # Get dict: seed number -> (action chunk, future state, value)
-                seed_to_return_dict = {
-                    cfg.seed + query_idx: (
-                        return_dict["actions"],
-                        return_dict["future_image_predictions"],
-                        return_dict["value_prediction"],
-                    )
-                    for query_idx, return_dict in enumerate(query_results)
-                }
-                # Get seed with highest value
-                best_seed, best_return_dict = max(seed_to_return_dict.items(), key=lambda x: x[1][2])
-                best_actions = best_return_dict[0]
-                best_future_predictions = best_return_dict[1]
-                best_value_predictions = best_return_dict[2]
-                # Use the best actions, future predictions, and value predictions found
-                # print(best_actions[0].shape) # 7
-                action_queue.extend(best_actions[:cfg.num_open_loop_steps])
-                future_image_predictions_list.append(best_future_predictions)
-                log_message(f"t={t}: Selected seed {best_seed} with value = {best_value_predictions:.4f}", log_file)
+                        
+                        actions = action_return_dict["actions"]
+                        action_queue.extend(actions[:cfg.num_open_loop_steps])
 
             # Get action from queue
             action = action_queue.popleft() # for cosmos policy libero data, gripper max=1, min=-1, but for ours, max=1, min=0
@@ -787,14 +661,14 @@ def run_task(
             total_successes += 1
 
         # Save replay video
-        if not success or task_successes % 10 == 0:
-            save_rollout_video(
-                replay_images,
-                total_episodes,
-                success=success,
-                task_description=task_description,
-                log_file=log_file,
-            )
+        # if not success or task_successes % 10 == 0:
+        save_rollout_video(
+            replay_images,
+            total_episodes,
+            success=success,
+            task_description=task_description,
+            log_file=log_file,
+        )
 
         # Save replay video with future image predictions included
         future_primary_image_predictions = None
@@ -923,6 +797,7 @@ def eval_libero(cfg: PolicyEvalConfig) -> float:
         else:
             planning_model = None
 
+    model.ace.action_encoder.action_decoder.float()
     # Get expected image dimensions
     resize_size = get_image_resize_size(cfg.model_family)
 

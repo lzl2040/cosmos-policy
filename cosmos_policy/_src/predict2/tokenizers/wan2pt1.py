@@ -58,7 +58,6 @@ class CausalConv3d(nn.Conv3d):
             x = torch.cat([cache_x, x], dim=2)
             padding[4] -= cache_x.shape[2]
         x = F.pad(x, padding)
-
         return super().forward(x)
 
 
@@ -614,6 +613,7 @@ def _video_vae(
         dropout=0.0,
     )
     cfg.update(**kwargs)
+    # print(f"Device:{device}")
 
     # init model
     with torch.device("meta"):
@@ -690,7 +690,7 @@ def _video_vae(
         return model, img_mean, img_std, video_mean, video_std
 
     return (
-        model,
+        model.to(device),
         torch.zeros(1, 1, 1, 1, 1, device=device),
         torch.ones(1, 1, 1, 1, 1, device=device),
         torch.zeros(1, 1, 50, 1, 1, device=device),
@@ -791,7 +791,7 @@ class WanVAE:
             self.model = self.model.to(dtype=dtype)
             self.context = nullcontext()
         else:
-            self.context = torch.amp.autocast("cuda", dtype=dtype)
+            self.context = torch.amp.autocast(device, dtype=dtype)
 
     def count_param(self):
         return sum(p.numel() for p in self.model.parameters())
@@ -959,9 +959,10 @@ class WanVAE:
 
 
 class Wan2pt1VAEInterface(VideoTokenizerInterface):
-    def __init__(self, chunk_duration: int = 81, load_mean_std=False, **kwargs):
+    def __init__(self, chunk_duration: int = 81, load_mean_std=False, device="cuda", **kwargs):
         self.keep_decoder_cache = kwargs.get("keep_decoder_cache", False)
         self.keep_encoder_cache = kwargs.get("keep_encoder_cache", False)
+        # print(f"Wan2pt1VAEInterface use Device:{device}")
         self.model = WanVAE(
             dtype=torch.bfloat16,
             is_amp=False,
@@ -974,6 +975,7 @@ class Wan2pt1VAEInterface(VideoTokenizerInterface):
             temporal_window=kwargs.get("temporal_window", 4),
             is_parallel=kwargs.get("is_parallel", False),
             cp_grid_shape=kwargs.get("cp_grid_shape", None),
+            device=device
         )
         del kwargs
         self.chunk_duration = chunk_duration

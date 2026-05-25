@@ -180,7 +180,7 @@ class DiffusionModel(ImaginaireModel):
         vision_model_name = vision_model_name if os.path.isdir(vision_model_name) else "google/siglip2-base-patch16-224"
         
         self.ace = ACE(vision_model_name=vision_model_name).to(self.precision)
-        self.ace.eval()
+        # self.ace.eval()
         if ace_pt_path is not None and os.path.exists(ace_pt_path):
             weights = torch.load(ace_pt_path, map_location="cpu")["module"]
             missing_keys, unexpected_keys = self.ace.load_state_dict(weights, strict=False)

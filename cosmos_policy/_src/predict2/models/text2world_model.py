@@ -62,8 +62,6 @@ from cosmos_policy._src.predict2.networks.model_weights_stats import WeightTrain
 from cosmos_policy._src.predict2.text_encoders.text_encoder import TextEncoder, TextEncoderConfig
 from cosmos_policy._src.predict2.tokenizers.base_vae import BaseVAE
 from cosmos_policy._src.predict2.utils.dtensor_helper import DTensorFastEmaModelUpdater, broadcast_dtensor_model_states
-# from cosmos_policy._src.predict2.models.ace_vision import VisionEncoder
-# from cosmos_policy._src.predict2.models.ace_action import ActionChunkEncoder, ACEConfig
 from cosmos_policy.models.ace import ACE
 
 IS_PREPROCESSED_KEY = "is_preprocessed"
@@ -145,8 +143,7 @@ class DiffusionModel(ImaginaireModel):
             "float16": torch.float16,
             "bfloat16": torch.bfloat16,
         }[config.precision]
-        # self.tensor_kwargs = {"device": f"cuda:{config.device_id}", "dtype": self.precision}
-        self.tensor_kwargs = {"device": f"cuda", "dtype": self.precision}
+        self.tensor_kwargs = {"device": "cuda", "dtype": self.precision}
         log.warning(f"DiffusionModel: precision {self.precision}")
 
         # 1. set data keys and data information
@@ -164,15 +161,6 @@ class DiffusionModel(ImaginaireModel):
             )
         )
         
-        ### my add ###
-        # ace_pt_path = "/home/cosmos/.cache/cosmos_policy/libero/ace_libero_decoder/step_6k/mp_rank_00_model_states.pt"
-        # vision_model_name: str = "/home/cosmos/.cache/siglip2-base-patch16-224"
-        
-        # ace_pt_path = "/mnt/wangxiaofa/action_chunk_encoder_exp/0425_pretrain_ace_ms_data_bs_512_gather_franka_full/0425_pretrain_ace_ms_data_bs_512_gather_franka_full/global_step7000/mp_rank_00_model_states.pt"
-        # vision_model_name: str = "/mnt/wangxiaofa/pt_weights/siglip2-base-patch16-224/"
-        
-        # for b200 81
-        # ace_pt_path = "/mnt/pvc/msra-training_data/weights/pt_ace/0522_ace/step_6k/mp_rank_00_model_states.pt"
         vision_model_name: str = "/mnt/pvc/msra-training_data/weights/siglip2-base-patch16-224/"
         # for b200 03
         # 0522_ace(0520 in blob): fix action equal zero bug
@@ -187,14 +175,7 @@ class DiffusionModel(ImaginaireModel):
             print("missing_keys:", missing_keys)
             print("unexpected_keys:", unexpected_keys)
             print(f"Load ace weights from:{ace_pt_path}")
-        # for name, param in self.ace.named_parameters():
-        #     if "action_decoder" in name:
-        #         param.requires_grad = True
-        #     else:
-        #         param.requires_grad = False
-        
-        ### my add ###
-        
+
         # 3. tokenizer
         with misc.timer("DiffusionModel: set_up_tokenizer"):
             self.tokenizer: BaseVAE = lazy_instantiate(config.tokenizer)
@@ -259,7 +240,7 @@ class DiffusionModel(ImaginaireModel):
             self._param_count = count_params(net, verbose=False)
 
             if self.fsdp_device_mesh:
-                # net.fully_shard(mesh=self.fsdp_device_mesh)
+                net.fully_shard(mesh=self.fsdp_device_mesh)
                 net = fully_shard(net, mesh=self.fsdp_device_mesh, reshard_after_forward=True)
 
             with misc.timer("meta to cuda and broadcast model states"):
@@ -326,7 +307,7 @@ class DiffusionModel(ImaginaireModel):
             optimizer (torch.optim.Optimizer): The model optimizer.
             scheduler (torch.optim.lr_scheduler.LRScheduler): The optimization scheduler.
         """
-        optimizer = lazy_instantiate(optimizer_config, models=[self.net, self.ace.action_encoder.action_decoder])
+        optimizer = lazy_instantiate(optimizer_config, models=[self.net, self.ace])
         scheduler = get_base_scheduler(optimizer, self, scheduler_config)
         return optimizer, scheduler
 
@@ -424,7 +405,6 @@ class DiffusionModel(ImaginaireModel):
             x0_B_C_T_H_W, condition, epsilon_B_C_T_H_W, sigma_B_T
         )
 
-        # print(self.loss_reduce)
         if self.loss_reduce == "mean":
             kendall_loss = kendall_loss.mean() * self.loss_scale
         elif self.loss_reduce == "sum":
@@ -764,18 +744,10 @@ class DiffusionModel(ImaginaireModel):
         is_image_batch = self.is_image_batch(data_batch)
 
         # Latent state
-        # raw_state: [8, 3, 37, 224, 224]
         raw_state = data_batch[self.input_image_key if is_image_batch else self.input_data_key]
-        # for ace
-        # output_dict = self.encode(raw_state)
-        # latent_state = output_dict["vae_feature"].contiguous().float() # [8, 9, 16, 28, 28]
-        # latent_state = latent_state.permute(0, 2, 1, 3, 4)  # [4, 16, 9, 28, 28]
-
-        # raw cosmos
-        latent_state = self.encode(raw_state).contiguous().float() # [4, 16, 9, 28, 28] # vae 
+        latent_state = self.encode(raw_state).contiguous().float()
 
         # Condition
-        # print(self.conditioner, self.config.conditioner)
         condition = self.conditioner(data_batch)
         condition = condition.edit_data_type(DataType.IMAGE if is_image_batch else DataType.VIDEO)
         return raw_state, latent_state, condition
@@ -808,12 +780,11 @@ class DiffusionModel(ImaginaireModel):
             # Check if the data has already been normalized and avoid re-normalizing
             if IS_PREPROCESSED_KEY in data_batch and data_batch[IS_PREPROCESSED_KEY] is True:
                 assert torch.is_floating_point(data_batch[input_key]), "Video data is not in float format."
-                # assert torch.all((data_batch[input_key] >= -1.0001) & (data_batch[input_key] <= 1.0001)), (
-                #     f"Video data is not in the range [-1, 1]. get data range [{data_batch[input_key].min()}, {data_batch[input_key].max()}]"
-                # )
+                assert torch.all((data_batch[input_key] >= -1.0001) & (data_batch[input_key] <= 1.0001)), (
+                    f"Video data is not in the range [-1, 1]. get data range [{data_batch[input_key].min()}, {data_batch[input_key].max()}]"
+                )
             else:
                 assert data_batch[input_key].dtype == torch.uint8, "Video data is not in uint8 format."
-                # print(torch.max(data_batch[input_key]))
                 data_batch[input_key] = data_batch[input_key].to(**self.tensor_kwargs) / 127.5 - 1.0
                 data_batch[IS_PREPROCESSED_KEY] = True
 
@@ -952,7 +923,6 @@ class DiffusionModel(ImaginaireModel):
         c_skip_B_1_T_1_1, c_out_B_1_T_1_1, c_in_B_1_T_1_1, c_noise_B_1_T_1_1 = self.scaling(sigma=sigma_B_1_T_1_1)
 
         # forward pass through the network
-        # print(xt_B_C_T_H_W.shape, c_in_B_1_T_1_1.shape)
         net_output_B_C_T_H_W = self.net(
             x_B_C_T_H_W=(xt_B_C_T_H_W * c_in_B_1_T_1_1).to(
                 **self.tensor_kwargs
@@ -1037,7 +1007,6 @@ class DiffusionModel(ImaginaireModel):
     @torch.no_grad()
     def encode(self, state: torch.Tensor) -> torch.Tensor:
         return self.tokenizer.encode(state) * self.sigma_data
-        # return self.ace.vision_model(state)
 
     @torch.no_grad()
     def decode(self, latent: torch.Tensor) -> torch.Tensor:

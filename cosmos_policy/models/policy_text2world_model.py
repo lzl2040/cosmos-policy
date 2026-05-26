@@ -40,6 +40,8 @@ from cosmos_policy._src.predict2.models.text2world_model import (
 from cosmos_policy.conditioner import Text2WorldCondition
 from cosmos_policy.modules.cosmos_sampler import CosmosPolicySampler
 from cosmos_policy.modules.hybrid_edm_sde import HybridEDMSDE
+from cosmos_policy.experiments.robot.cosmos_utils import extract_action_chunk_from_latent_sequence
+
 
 
 def replace_latent_with_action_chunk(
@@ -273,7 +275,7 @@ class CosmosPolicyDiffusionModel(BaseDiffusionModel):
         x0_B_C_T_H_W, condition, epsilon_B_C_T_H_W, sigma_B_T = self.broadcast_split_for_model_parallelsim(
             x0_B_C_T_H_W, condition, epsilon_B_C_T_H_W, sigma_B_T
         )
-        output_batch, kendall_loss, _, _ = self.compute_loss_with_epsilon_and_sigma(
+        output_batch, kendall_loss, _, _, kendall_loss_action_mse_loss = self.compute_loss_with_epsilon_and_sigma(
             x0_B_C_T_H_W,
             condition,
             epsilon_B_C_T_H_W,
@@ -297,6 +299,7 @@ class CosmosPolicyDiffusionModel(BaseDiffusionModel):
             value_function_sample_mask=data_batch["value_function_sample_mask"],
             value_function_return=data_batch["value_function_return"],
             value_indices=data_batch["value_latent_idx"],
+            sample_rate=data_batch["sample_rate"],
         )
 
         if self.loss_reduce == "mean":
@@ -306,7 +309,7 @@ class CosmosPolicyDiffusionModel(BaseDiffusionModel):
         else:
             raise ValueError(f"Invalid loss_reduce: {self.loss_reduce}")
 
-        return output_batch, kendall_loss
+        return output_batch, kendall_loss + 0.2 * kendall_loss_action_mse_loss
 
     def compute_loss_with_epsilon_and_sigma(
         self,
@@ -329,6 +332,7 @@ class CosmosPolicyDiffusionModel(BaseDiffusionModel):
         value_function_sample_mask: torch.Tensor,
         value_function_return: torch.Tensor,
         value_indices: torch.Tensor,
+        sample_rate: torch.Tensor,
     ):
         """
         NOTE (user): Modified to add action chunk prediction and future image prediction + action chunk loss logging.
@@ -378,11 +382,19 @@ class CosmosPolicyDiffusionModel(BaseDiffusionModel):
         condition.orig_x0_B_C_T_H_W = x0_B_C_T_H_W.clone()  # Keep a backup of the original gt_frames
         batch_indices = torch.arange(x0_B_C_T_H_W.shape[0], device=x0_B_C_T_H_W.device)
         C_latent, H_latent, W_latent = x0_B_C_T_H_W.shape[1], x0_B_C_T_H_W.shape[3], x0_B_C_T_H_W.shape[4]
+        
+        with torch.no_grad():
+            action_embeddings = self.ace.action_encoder(action_chunk, sample_rate)
+        
         # Action
         x0_B_C_T_H_W = replace_latent_with_action_chunk(
             x0_B_C_T_H_W,
-            action_chunk,
+            action_embeddings,
             action_indices=action_indices,
+        )
+        condition.orig_gt_frames = condition.gt_frames.clone()  # Keep a backup of the original gt_frames
+        condition.gt_frames = replace_latent_with_action_chunk(
+            condition.gt_frames, action_embeddings, action_indices=action_indices
         )
         # Proprio
         if torch.all(current_proprio_indices != -1):  # -1 indicates proprio is not used
@@ -565,8 +577,17 @@ class CosmosPolicyDiffusionModel(BaseDiffusionModel):
         ):
             kendall_loss = kendall_loss * rearrange(final_mask_B_T, "b t -> b 1 t 1 1")
 
-        kendall_loss_action_mse_loss = torch.tensor(0.0, device=x0_B_C_T_H_W.device)
-        kendall_loss_action_l1_loss = torch.tensor(0.0, device=x0_B_C_T_H_W.device)
+        
+        action_shape = action_embeddings.shape[1:]
+        pred_action_embeds = extract_action_chunk_from_latent_sequence(model_pred.x0, action_shape, action_indices)
+        pred_action_embeds = pred_action_embeds.to(dtype=action_embeddings.dtype)
+        pred_action = self.ace.action_encoder.decode_actions(pred_action_embeds)  # [B, chunk_size, action_dim]
+        # print(f"Predicted action: {pred_action.shape} and GT action: {action_chunk.shape}")
+        kendall_loss_action_mse_loss = ((pred_action - action_chunk) ** 2).mean()
+        kendall_loss_action_l1_loss = torch.abs(pred_action - action_chunk).mean()
+        
+        # kendall_loss_action_mse_loss = torch.tensor(0.0, device=x0_B_C_T_H_W.device)
+        # kendall_loss_action_l1_loss = torch.tensor(0.0, device=x0_B_C_T_H_W.device)
         kendall_loss_state_mse_loss = torch.tensor(0.0, device=x0_B_C_T_H_W.device)
         kendall_loss_state_l1_loss = torch.tensor(0.0, device=x0_B_C_T_H_W.device)
 
@@ -711,7 +732,7 @@ class CosmosPolicyDiffusionModel(BaseDiffusionModel):
             "value_function_sample_value_mse_loss": value_function_sample_value_mse_loss,  # Main loss for value function
             "value_function_sample_value_l1_loss": value_function_sample_value_l1_loss,  # Main loss for value function
         }
-        return output_batch, kendall_loss, pred_mse_B_C_T_H_W, edm_loss_B_C_T_H_W
+        return output_batch, kendall_loss, pred_mse_B_C_T_H_W, edm_loss_B_C_T_H_W, kendall_loss_action_mse_loss
 
     def generate_samples_from_batch(
         self,

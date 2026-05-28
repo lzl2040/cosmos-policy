@@ -48,8 +48,8 @@ DATE = time.strftime("%Y_%m_%d")
 DATE_TIME = time.strftime("%Y_%m_%d-%H_%M_%S")
 DEVICE = torch.device("cuda:0") if torch.cuda.is_available() else torch.device("cpu")
 COSMOS_IMAGE_SIZE = 224  # Standard image size expected by Cosmos policies
-# COSMOS_TEMPORAL_COMPRESSION_FACTOR = 4
-COSMOS_TEMPORAL_COMPRESSION_FACTOR = 1
+COSMOS_TEMPORAL_COMPRESSION_FACTOR = 4
+# COSMOS_TEMPORAL_COMPRESSION_FACTOR = 1
 
 # Initialize global T5 text embeddings cache (to be filled later)
 t5_text_embeddings_cache = {}
@@ -107,6 +107,11 @@ def ort6d_to_euler(ort6d, seq='xyz', degrees=False):
     if len(original_shape) == 1:
         return euler[0]
     return euler
+
+def quat_to_ort6d(quat: np.ndarray) -> np.ndarray:
+    """Convert quaternion to ort6d in batch."""
+    rot_mat = Rotation.from_quat(quat).as_matrix()
+    return rot_mat[..., :2].reshape(*rot_mat.shape[:-2], 6)
 
 def get_latent_indices_from_model_config(model):
     """
@@ -650,6 +655,7 @@ def extract_action_chunk_from_latent_sequence(
     action_latent_frame = output_latent[batch_indices, :, action_indices, :, :]  # (B, C', H', W')
     # Get shape of latent frames
     batch_size, latent_channels, latent_h, latent_w = action_latent_frame.shape
+    # print(action_latent_frame.shape) # 1 16 28 28
     # Flatten the action latent frame into a vector (preserving batch dimension)
     flat_action_latent = action_latent_frame.reshape(batch_size, -1)
     num_latent_elements = flat_action_latent.shape[1]
@@ -675,6 +681,15 @@ def extract_action_chunk_from_latent_sequence(
     # New shape: (batch_size, chunk_size, action_dim)
     final_action_chunk = torch.mean(all_action_chunks, dim=1)
     # final_action_chunk = all_action_chunks[:, 0]
+    # # 取第0个 action chunk
+    # first = all_action_chunks[:, 0:1, :, :]   # shape: (batch_size, 1, H, W)
+
+    # # 和后面的做差
+    # diff = all_action_chunks[:, 1:, :, :] - first   # 自动广播
+
+    # # 求和（你可以指定维度）
+    # result = diff.sum(dim=(1, 3))   # 在 num_action_chunks 维度求和
+    # print(result)
     return final_action_chunk
 
 
@@ -1053,6 +1068,14 @@ def get_action(
         proprio = None
         if cfg.use_proprio:
             proprio = obs["proprio"]
+            # convert it to ort6d
+            xyz = proprio[:3]
+            quant = proprio[3:7]
+            gripper = proprio[-1:]
+            # convert quaternion to ort6d
+            quant_ort6d = quat_to_ort6d(quant)
+            # print(quant_ort6d.shape)
+            proprio = np.concatenate([xyz, quant_ort6d, gripper], axis=0)
             # print(proprio.shape)
             org_state_dim = proprio.shape[0]
             pad_width = cfg.max_state_dim - org_state_dim
@@ -1062,7 +1085,7 @@ def get_action(
                 # rescale_proprio
                 proprio = rescale_proprio_with_mean_std(proprio, dataset_stats, non_negative_only=False, 
                                           scale_multiplier=1.0, max_dim = cfg.max_state_dim)
-
+        
         # Build the raw image sequence that will be fed to the model (and the VAE tokenizer)
         image_sequence = []
         current_sequence_idx = 0  # Used to track which index in the sequence of images we are on
@@ -1075,6 +1098,19 @@ def get_action(
         blank_image_duplicated = duplicate_array(
             blank_image.copy(), total_num_copies=COSMOS_TEMPORAL_COMPRESSION_FACTOR
         )
+        
+        # raw cosmos, add first place with blank image (this is a special placeholder that indicates the start of the sequence for the 1+T temporal compression scheme in the VAE tokenizer - see cosmos_policy._src.models.video_vae_tokenizer.VideoVAETokenizer._tokenize_images_with_temporal_compression)
+        image_sequence.append(np.expand_dims(np.zeros_like(blank_image), axis=0))
+        current_sequence_idx += 1
+        
+         # Add blank placeholder images for robot proprioceptive state (proprio will be injected into latent later)
+        if cfg.use_proprio:
+            blank_image_duplicated = duplicate_array(
+                blank_image.copy(), total_num_copies=COSMOS_TEMPORAL_COMPRESSION_FACTOR
+            )
+            image_sequence.append(blank_image_duplicated)
+            current_proprio_latent_idx = current_sequence_idx
+            current_sequence_idx += 1
 
         # Add current wrist image(s)
         wrist_image, wrist_image2 = None, None
@@ -1116,6 +1152,12 @@ def get_action(
         image_sequence.append(blank_image_duplicated.copy())
         action_latent_idx = current_sequence_idx
         current_sequence_idx += 1
+        
+        # Add blank placeholder images for future proprioceptive state (future proprio will be injected into latent later)
+        if cfg.use_proprio:
+            image_sequence.append(blank_image_duplicated.copy())
+            future_proprio_latent_idx = current_sequence_idx
+            current_sequence_idx += 1
         
         # Add placeholders for the future wrist image(s) - copies of the current wrist image(s)
         if cfg.use_wrist_image:
@@ -1172,7 +1214,8 @@ def get_action(
                 (batch_size, 1, COSMOS_IMAGE_SIZE, COSMOS_IMAGE_SIZE), dtype=torch.bfloat16
             ).to(device),  # Padding mask (assume no padding here)
             # "num_conditional_frames": model.config.min_num_conditional_frames,  # Number of latent frames used as conditioning
-            "num_conditional_frames": 3, 
+            "num_conditional_frames": 5, # for vae encoder
+            # "num_conditional_frames": 3, # for ace vision encoder
             "proprio": proprio_tensor if cfg.use_proprio else None,
             # Specify the indices of various elements in the latent diffusion sequence
             "current_proprio_latent_idx": (
@@ -1281,7 +1324,7 @@ def get_action(
         
         # If generating future state and value in parallel with the actions (instead of autoregressively),
         # extract future state and value predictions from the generated sample now
-        generate_future_state_and_value_in_parallel = False
+        # generate_future_state_and_value_in_parallel = False
         if generate_future_state_and_value_in_parallel:
             # Get indices in the generated sample to replace with the original (pre-injection) latent frames so that VAE decoding produces correct images
             if cfg.suite == "libero":
@@ -1374,6 +1417,7 @@ def get_action(
             proprio=proprio,
             text_embedding=text_embedding,
         )
+        # print(generate_future_state_and_value_in_parallel)
         if generate_future_state_and_value_in_parallel:
             return_dict["future_image_predictions"] = future_image_predictions
             return_dict["value_prediction"] = value_prediction

@@ -221,6 +221,16 @@ class DiffusionModel(ImaginaireModel):
         self.input_image_key = self.config.input_image_key
         self.input_caption_key = self.config.input_caption_key
 
+    def load_ace_weights(self, ace_pt_path: str):
+        if ace_pt_path is not None and os.path.exists(ace_pt_path):
+            weights = torch.load(ace_pt_path, map_location="cpu")["module"]
+            missing_keys, unexpected_keys = self.ace.load_state_dict(weights, strict=False)
+            print("missing_keys:", missing_keys)
+            print("unexpected_keys:", unexpected_keys)
+            print(f"Load ace weights from:{ace_pt_path}")
+        else:
+            print(f"ace_pt_path {ace_pt_path} does not exist, skip loading ace weights.")
+    
     def build_net(self):
         config = self.config
 

@@ -271,6 +271,20 @@ class ACE(nn.Module):
         # Layer norm for stability
         # self.image_ln = nn.LayerNorm(projection_dim)
         # self.action_ln = nn.LayerNorm(hidden_dim)
+        
+        # add for debug
+        self.action_encoder_simple = nn.Sequential(
+            nn.Linear(max_action_dim, hidden_dim),
+            nn.LayerNorm(hidden_dim, eps=1e-6),
+            nn.SiLU(),
+            nn.Linear(hidden_dim, hidden_dim)
+        )
+        self.action_decoder_simple = nn.Sequential(
+            nn.LayerNorm(hidden_dim, eps=1e-6),
+            nn.Linear(hidden_dim, hidden_dim),
+            nn.SiLU(),
+            nn.Linear(hidden_dim, max_action_dim)
+        )
     
     def encode_images(self, images: torch.Tensor) -> torch.Tensor:
         """Encode images to normalized embeddings.

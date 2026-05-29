@@ -69,8 +69,8 @@ libero_all_4_suites_dataset = L(MultiDatasetforDistTraining)(
     # parent_dir="/mnt/wangxiaofa/robot_dataset/lerobot-format",
     vla2root_json="vla2root.json",
     balance_dataset_weights=True,
-    max_action_dim=16,
-    max_state_dim=16,
+    max_action_dim=32,
+    max_state_dim=32,
     dataset_len_one_epoch=5000
 )
 cosmos_predict2_2b_480p_libero = LazyDict(

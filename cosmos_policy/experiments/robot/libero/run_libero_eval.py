@@ -529,6 +529,8 @@ def run_episode(
                             f"Query {query_idx + 1}/{num_queries}: Action query time = {query_time:.3f} sec", log_file
                         )
                         return_dict["actions"] = action_return_dict["actions"]
+                        # return_dict["future_image_predictions"] = action_return_dict["future_image_predictions"]
+                        future_image_predictions_list.append(action_return_dict["future_image_predictions"])
                         actions_by_depth.append(return_dict["actions"])
                         
                         actions = action_return_dict["actions"]
@@ -602,6 +604,7 @@ def run_task(
     total_episodes=0,
     total_successes=0,
     log_file=None,
+    res_log_file=None,
     device="cuda:0"
 ):
     """Run evaluation for a single task."""
@@ -728,6 +731,7 @@ def run_task(
     total_success_rate = float(total_successes) / float(total_episodes) if total_episodes > 0 else 0
     log_message(f"Current task success rate: {task_success_rate}", log_file)
     log_message(f"Current total success rate: {total_success_rate}", log_file)
+    log_message(f"{task_description}: {task_success_rate}", res_log_file)
 
     # Log to wandb if enabled
     if cfg.use_wandb:
@@ -786,6 +790,8 @@ def eval_libero(cfg: PolicyEvalConfig) -> float:
     # If using serial inference, initialize model and Cosmos config
     else:
         model, cosmos_config = get_model(cfg, device)
+        ace_decoder_path = "/home/cosmos/.cache/cosmos_policy/libero/ace_libero_decoder/step_5k/mp_rank_00_model_states.pt"
+        model.load_ace_weights(ace_decoder_path)
         assert cfg.chunk_size == cosmos_config.dataloader_train.dataset.chunk_size, (
             f"Mismatch found between train and test chunk sizes! Train: {cosmos_config.dataloader_train.dataset.chunk_size}, Test: {cfg.chunk_size}"
         )
@@ -802,7 +808,7 @@ def eval_libero(cfg: PolicyEvalConfig) -> float:
     resize_size = get_image_resize_size(cfg.model_family)
 
     # Setup logging
-    log_file, local_log_filepath, run_id = setup_logging(
+    log_file, local_log_filepath, run_id, res_log_file = setup_logging(
         cfg=cfg,
         task_identifier=cfg.task_suite_name,
         log_dir=cfg.local_log_dir,
@@ -811,6 +817,7 @@ def eval_libero(cfg: PolicyEvalConfig) -> float:
         wandb_entity=cfg.wandb_entity,
         wandb_project=cfg.wandb_project,
     )
+    # res_log_file = log_file.replace(".txt", "_results.txt")
     log_message(f"Eval config: {cfg}", log_file)
 
     # Log parallel inference configuration and start worker pool
@@ -868,6 +875,7 @@ def eval_libero(cfg: PolicyEvalConfig) -> float:
             total_episodes,
             total_successes,
             log_file,
+            res_log_file,
             device
         )
 
@@ -879,6 +887,7 @@ def eval_libero(cfg: PolicyEvalConfig) -> float:
     log_message(f"Total episodes: {total_episodes}", log_file)
     log_message(f"Total successes: {total_successes}", log_file)
     log_message(f"Overall success rate: {final_success_rate:.4f} ({final_success_rate * 100:.1f}%)", log_file)
+    log_message(f"Overall success rate: {final_success_rate * 100:.1f}%", res_log_file)
     # Log to wandb if enabled
     if cfg.use_wandb:
         wandb.log(

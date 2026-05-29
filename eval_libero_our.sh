@@ -1,10 +1,10 @@
 uv run --no-sync --extra cu128 --group libero --python 3.10 \
   python -m cosmos_policy.experiments.robot.libero.run_libero_eval \
     --config cosmos_predict2_2b_480p_libero__inference_only \
-    --ckpt_path "/home/cosmos/.cache/cosmos_policy/libero/ace_cosmos_0521/checkpoints/iter_000040000/model" \
+    --ckpt_path "/home/cosmos/.cache/cosmos_policy/libero/ace_cosmos_vae_feats_0527/iter_000034000/model" \
     --config_file cosmos_policy/config/config.py \
     --use_wrist_image True \
-    --use_proprio False \
+    --use_proprio True \
     --use_third_person_image True \
     --num_third_person_images 2 \
     --normalize_proprio True \
@@ -25,7 +25,7 @@ uv run --no-sync --extra cu128 --group libero --python 3.10 \
     --seed 195 \
     --use_variance_scale False \
     --deterministic True \
-    --run_id_note min-max-wo-second-chkpt28000--5stepAct--seed195--deterministic \
+    --run_id_note cosmos-ace-vae-feats-chkpt34000--5stepAct--seed195--deterministic-debug \
     --ar_future_prediction False \
     --ar_value_prediction False \
     --use_jpeg_compression False \

@@ -384,8 +384,8 @@ class CosmosPolicyDiffusionModel(BaseDiffusionModel):
         C_latent, H_latent, W_latent = x0_B_C_T_H_W.shape[1], x0_B_C_T_H_W.shape[3], x0_B_C_T_H_W.shape[4]
         
         with torch.no_grad():
-            # action_embeddings = self.ace.action_encoder(action_chunk, sample_rate)
-            action_embeddings = self.ace.action_encoder_simple(action_chunk)
+            action_embeddings = self.ace.action_encoder(action_chunk, sample_rate)
+            # action_embeddings = self.ace.action_encoder_simple(action_chunk)
         
         # Action
         x0_B_C_T_H_W = replace_latent_with_action_chunk(
@@ -582,8 +582,8 @@ class CosmosPolicyDiffusionModel(BaseDiffusionModel):
         action_shape = action_embeddings.shape[1:]
         pred_action_embeds = extract_action_chunk_from_latent_sequence(model_pred.x0, action_shape, action_indices)
         pred_action_embeds = pred_action_embeds.to(dtype=action_embeddings.dtype)
-        pred_action = self.ace.action_decoder_simple(pred_action_embeds)
-        # pred_action = self.ace.action_encoder.decode_actions(pred_action_embeds)  # [B, chunk_size, action_dim]
+        # pred_action = self.ace.action_decoder_simple(pred_action_embeds)
+        pred_action = self.ace.action_encoder.decode_actions(pred_action_embeds)  # [B, chunk_size, action_dim]
         # print(f"Predicted action: {pred_action.shape} and GT action: {action_chunk.shape}")
         kendall_loss_action_mse_loss = ((pred_action - action_chunk) ** 2).mean()
         kendall_loss_action_l1_loss = torch.abs(pred_action - action_chunk).mean()

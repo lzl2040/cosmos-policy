@@ -309,7 +309,7 @@ class CosmosPolicyDiffusionModel(BaseDiffusionModel):
         else:
             raise ValueError(f"Invalid loss_reduce: {self.loss_reduce}")
 
-        return output_batch, kendall_loss + 0.2 * kendall_loss_action_mse_loss
+        return output_batch, kendall_loss + 5 * kendall_loss_action_mse_loss
 
     def compute_loss_with_epsilon_and_sigma(
         self,

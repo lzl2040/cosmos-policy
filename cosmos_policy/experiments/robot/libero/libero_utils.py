@@ -46,7 +46,8 @@ def get_libero_image(obs, flip_images: bool = False):
     """Extracts third-person image from observations and preprocesses it."""
     img = obs["agentview_image"]
     if flip_images:
-        img = np.flipud(img)
+        # img = np.flipud(img)
+        img = np.ascontiguousarray(img[::-1, ::-1])
     return img
 
 
@@ -54,7 +55,8 @@ def get_libero_wrist_image(obs, flip_images: bool = False):
     """Extracts wrist camera image from observations and preprocesses it."""
     img = obs["robot0_eye_in_hand_image"]
     if flip_images:
-        img = np.flipud(img)
+        # img = np.flipud(img)
+        img = np.ascontiguousarray(img[::-1, ::-1])
     return img
 
 

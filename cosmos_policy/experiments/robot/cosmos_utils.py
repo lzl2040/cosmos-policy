@@ -108,6 +108,11 @@ def ort6d_to_euler(ort6d, seq='xyz', degrees=False):
         return euler[0]
     return euler
 
+def euler_to_ort6d(euler: np.ndarray) -> np.ndarray:
+    """Convert quaternion to ort6d in batch."""
+    rot_mat = Rotation.from_euler("xyz", euler).as_matrix()
+    return rot_mat[..., :2].reshape(*rot_mat.shape[:-2], 6)
+
 def quat_to_ort6d(quat: np.ndarray) -> np.ndarray:
     """Convert quaternion to ort6d in batch."""
     rot_mat = Rotation.from_quat(quat).as_matrix()
@@ -1070,12 +1075,13 @@ def get_action(
             proprio = obs["proprio"]
             # convert it to ort6d
             xyz = proprio[:3]
-            quant = proprio[3:7]
+            quant = proprio[3:6] # rpy
             gripper = proprio[-1:]
             # convert quaternion to ort6d
-            quant_ort6d = quat_to_ort6d(quant)
+            # quant_ort6d = quat_to_ort6d(quant)
+            euler_ort6d = euler_to_ort6d(quant)
             # print(quant_ort6d.shape)
-            proprio = np.concatenate([xyz, quant_ort6d, gripper], axis=0)
+            proprio = np.concatenate([xyz, euler_ort6d, gripper], axis=0)
             # print(proprio.shape)
             org_state_dim = proprio.shape[0]
             pad_width = cfg.max_state_dim - org_state_dim

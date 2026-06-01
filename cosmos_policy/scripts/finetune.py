@@ -74,7 +74,7 @@ def launch(config: Config, args: argparse.Namespace) -> None:
     with model_init():
         model = instantiate(config.model)
     # load weights
-    dcp_path = "/home/cosmos/.cache/cosmos_policy/libero/ace_cosmos_0521/checkpoints/iter_000010000/model"
+    dcp_path = "/home/cosmos/.cache/cosmos_policy/libero/ace_cosmos_0525-world-libero-pt/iter_000030000/model"
     checkpointer = DistributedCheckpointer(config.checkpoint, config.job, callbacks=None, disable_async=True)
 
     _model_wrapper = ModelWrapper(

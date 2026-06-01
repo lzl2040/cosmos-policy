@@ -110,6 +110,7 @@ import json
 import logging
 import os
 import time
+import cv2
 import traceback
 from collections import deque
 from dataclasses import dataclass
@@ -470,6 +471,7 @@ def run_episode(
 
             # Prepare observation
             observation = prepare_observation(obs, resize_size, cfg.flip_images)
+            # cv2.imwrite("primary.png", observation["primary_image"])
             replay_images.append(observation["primary_image"])
             if replay_wrist_images is not None:
                 replay_wrist_images.append(observation["wrist_image"])
@@ -790,8 +792,8 @@ def eval_libero(cfg: PolicyEvalConfig) -> float:
     # If using serial inference, initialize model and Cosmos config
     else:
         model, cosmos_config = get_model(cfg, device)
-        ace_decoder_path = "/home/cosmos/.cache/cosmos_policy/libero/ace_libero_decoder/step_5k/mp_rank_00_model_states.pt"
-        model.load_ace_weights(ace_decoder_path)
+        # ace_decoder_path = "/home/cosmos/.cache/cosmos_policy/libero/ace_libero_decoder/step_5k/mp_rank_00_model_states.pt"
+        # model.load_ace_weights(ace_decoder_path)
         assert cfg.chunk_size == cosmos_config.dataloader_train.dataset.chunk_size, (
             f"Mismatch found between train and test chunk sizes! Train: {cosmos_config.dataloader_train.dataset.chunk_size}, Test: {cfg.chunk_size}"
         )

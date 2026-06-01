@@ -728,6 +728,7 @@ def run_task(
     total_episodes=0,
     total_successes=0,
     log_file=None,
+    res_log_file=None,
     device="cuda:0"
 ):
     """Run evaluation for a single task."""
@@ -854,6 +855,7 @@ def run_task(
     total_success_rate = float(total_successes) / float(total_episodes) if total_episodes > 0 else 0
     log_message(f"Current task success rate: {task_success_rate}", log_file)
     log_message(f"Current total success rate: {total_success_rate}", log_file)
+    log_message(f"{task_description}: {task_success_rate}", res_log_file)
 
     # Log to wandb if enabled
     if cfg.use_wandb:
@@ -927,7 +929,7 @@ def eval_libero(cfg: PolicyEvalConfig) -> float:
     resize_size = get_image_resize_size(cfg.model_family)
 
     # Setup logging
-    log_file, local_log_filepath, run_id = setup_logging(
+    log_file, res_log_file, local_log_filepath, run_id = setup_logging(
         cfg=cfg,
         task_identifier=cfg.task_suite_name,
         log_dir=cfg.local_log_dir,
@@ -993,6 +995,7 @@ def eval_libero(cfg: PolicyEvalConfig) -> float:
             total_episodes,
             total_successes,
             log_file,
+            res_log_file,
             device
         )
 
@@ -1004,6 +1007,7 @@ def eval_libero(cfg: PolicyEvalConfig) -> float:
     log_message(f"Total episodes: {total_episodes}", log_file)
     log_message(f"Total successes: {total_successes}", log_file)
     log_message(f"Overall success rate: {final_success_rate:.4f} ({final_success_rate * 100:.1f}%)", log_file)
+    log_message(f"Overall success rate: {final_success_rate * 100:.1f}%", res_log_file)
     # Log to wandb if enabled
     if cfg.use_wandb:
         wandb.log(

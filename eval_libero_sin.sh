@@ -5,6 +5,7 @@ NUM_PER_TASK=20
 MAX_ACTION_DIM=7
 MAX_STATE_DIM=8
 ACTION_STEP=16
+NUM_THIRD_IMG=2
 
 # 解析命令行参数
 while [[ $# -gt 0 ]]; do
@@ -38,6 +39,10 @@ while [[ $# -gt 0 ]]; do
             ACTION_STEP="$2"
             shift 2
             ;;
+        --num_third_img)
+            NUM_THIRD_IMG="$2"
+            shift 2
+            ;;
         *)
             echo "未知参数: $1"
             exit 1
@@ -56,7 +61,7 @@ uv run --no-sync --extra cu128 --group libero --python 3.10 \
     --use_wrist_image True \
     --use_proprio True \
     --use_third_person_image True \
-    --num_third_person_images 1 \
+    --num_third_person_images $NUM_THIRD_IMG \
     --normalize_proprio True \
     --unnormalize_actions True \
     --dataset_stats_path /mnt/wangxiaofa/cosmos_policy_exp/cosmos_policy/libero_stats.json \

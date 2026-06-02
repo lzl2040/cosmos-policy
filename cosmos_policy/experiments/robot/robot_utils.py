@@ -103,6 +103,8 @@ def setup_logging(
     os.makedirs(log_dir, exist_ok=True)
     local_log_filepath = os.path.join(log_dir, run_id + ".txt")
     log_file = open(local_log_filepath, "w")
+    local_res_log_filepath = os.path.join(log_dir, run_id + "_results.txt")
+    res_log_file = open(local_res_log_filepath, "w")
     logger.info(f"Logging to local log file: {local_log_filepath}")
 
     # Initialize Weights & Biases logging if enabled
@@ -118,7 +120,7 @@ def setup_logging(
             tags=tags,
         )
 
-    return log_file, local_log_filepath, run_id
+    return log_file, res_log_file, local_log_filepath, run_id
 
 
 def log_message(message: str, log_file=None):

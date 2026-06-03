@@ -174,7 +174,8 @@ class DiffusionModel(ImaginaireModel):
         vision_model_name: str = "/mnt/pvc/msra-training_data/weights/siglip2-base-patch16-224/"
         # for b200 03
         # 0522_ace(0520 in blob): fix action equal zero bug
-        ace_pt_path = "/mnt/pvc/robo_home/lzl_ckpts/ace_pt_weights/0522_ace/step_9k/mp_rank_00_model_states.pt"
+        # 0523_ace_add_norm (0523_debug in blob): add layer norm and l2 norm for contrastive embedding
+        ace_pt_path = "/mnt/pvc/robo_home/lzl_ckpts/ace_pt_weights/0523_ace_add_norm/step_27k/mp_rank_00_model_states.pt"
         vision_model_name = vision_model_name if os.path.isdir(vision_model_name) else "google/siglip2-base-patch16-224"
         
         self.ace = ACE(vision_model_name=vision_model_name).to(self.precision)

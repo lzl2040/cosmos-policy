@@ -1621,12 +1621,12 @@ class MultiDatasetforDistTraining(torch.utils.data.Dataset):
             item = self.full_dataset[index]
         
         is_world_model_sample = False
-        is_value_function_sample = False
-        p_world_model = 0.5
-        if random.random() < p_world_model:
-            is_world_model_sample = True
-        else:
-            is_world_model_sample = False
+        # is_value_function_sample = False
+        # p_world_model = 0.5
+        # if random.random() < p_world_model:
+        #     is_world_model_sample = True
+        # else:
+        #     is_world_model_sample = False
         
         # del item
         task_id = item["task_index"].item()

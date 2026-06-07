@@ -38,6 +38,8 @@ import torchvision
 from datasets.features.features import register_feature
 from PIL import Image
 
+from cosmos_policy.datasets.lerobot_v3.compute_stats import RunningQuantileStats, auto_downsample_height_width
+
 logger = logging.getLogger(__name__)
 
 # List of hardware encoders to probe for auto-selection. Availability depends on the platform and FFmpeg build.
@@ -875,7 +877,6 @@ class _CameraEncoderThread(threading.Thread):
         self.encoder_threads = encoder_threads
 
     def run(self) -> None:
-        from lerobot.datasets.compute_stats import RunningQuantileStats, auto_downsample_height_width
 
         container = None
         output_stream = None

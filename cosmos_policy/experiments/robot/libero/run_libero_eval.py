@@ -603,6 +603,7 @@ def run_task(
     total_successes=0,
     log_file=None,
     res_log_file=None,
+    rollout_dir=None,
     device="cuda:0"
 ):
     """Run evaluation for a single task."""
@@ -669,6 +670,7 @@ def run_task(
             success=success,
             task_description=task_description,
             log_file=log_file,
+            rollout_dir=rollout_dir
         )
 
         # Save replay video with future image predictions included
@@ -813,6 +815,7 @@ def eval_libero(cfg: PolicyEvalConfig) -> float:
         wandb_entity=cfg.wandb_entity,
         wandb_project=cfg.wandb_project,
     )
+    rollout_dir = os.path.join(cfg.local_log_dir, "rollouts", f"run-{run_id}")
     log_message(f"Eval config: {cfg}", log_file)
 
     # Log parallel inference configuration and start worker pool
@@ -871,6 +874,7 @@ def eval_libero(cfg: PolicyEvalConfig) -> float:
             total_successes,
             log_file,
             res_log_file,
+            rollout_dir,
             device
         )
 

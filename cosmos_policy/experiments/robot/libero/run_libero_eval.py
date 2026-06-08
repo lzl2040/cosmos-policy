@@ -663,15 +663,15 @@ def run_task(
             total_successes += 1
 
         # Save replay video
-        # if not success or task_successes % 10 == 0:
-        save_rollout_video(
-            replay_images,
-            total_episodes,
-            success=success,
-            task_description=task_description,
-            log_file=log_file,
-            rollout_dir=rollout_dir
-        )
+        if not success or task_successes % 10 == 0:
+            save_rollout_video(
+                replay_images,
+                total_episodes,
+                success=success,
+                task_description=task_description,
+                log_file=log_file,
+                rollout_dir=rollout_dir
+            )
 
         # Save replay video with future image predictions included
         future_primary_image_predictions = None

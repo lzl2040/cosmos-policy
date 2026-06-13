@@ -24,7 +24,8 @@ from cosmos_policy._src.imaginaire.utils import log
 from cosmos_policy._src.imaginaire.utils.checkpoint_db import get_checkpoint_path  # noqa: F401
 from cosmos_policy.datasets.aloha_dataset import ALOHADataset
 from cosmos_policy.datasets.libero_dataset_v2 import LIBERODataset
-from cosmos_policy.datasets.lerobot_dataset_libero import MultiDatasetforDistTraining
+from cosmos_policy.datasets.lerobot_dataset_v2 import MultiDatasetforDistTraining
+# from cosmos_policy.datasets.lerobot_dataset_libero import MultiDatasetforDistTraining
 from cosmos_policy.datasets.robocasa_dataset import RoboCasaDataset
 from cosmos_policy.models.policy_video2world_model import CosmosPolicyVideo2WorldModel
 from cosmos_policy.modules.hybrid_edm_sde import HybridEDMSDE
@@ -64,8 +65,8 @@ libero_all_4_suites_dataset = L(MultiDatasetforDistTraining)(
     seed=1001,
     stage="finetune",
     data_mix="libero",
-    # parent_dir="/home/cosmos/.cache/lerobot_data",
-    parent_dir="/mnt/wangxiaofa/robot_dataset/lerobot-format",
+    parent_dir="/home/cosmos/.cache/lerobot_data",
+    # parent_dir="/mnt/wangxiaofa/robot_dataset/lerobot-format",
     vla2root_json="vla2root.json",
     balance_dataset_weights=True,
     max_action_dim=16,
@@ -128,6 +129,7 @@ cosmos_predict2_2b_480p_libero = LazyDict(
                 ),
                 # state_t=9,  # Latent temporal dim (blank, proprio, wrist, primary, action, future proprio, future wrist, future primary, value)
                 state_t = 10,
+                # state_t = 8,
                 min_num_conditional_frames=5,  # 1 blank, 3 conditioning (proprio, wrist, primary)
                 max_num_conditional_frames=5,  # 1 blank, 3 conditioning (proprio, wrist, primary)
                 sigma_conditional=0.0,  # No noise on conditional latents
@@ -140,6 +142,7 @@ cosmos_predict2_2b_480p_libero = LazyDict(
                 
                 tokenizer=dict(
                     chunk_duration=37,  # 1 blank + 36 images (4 proprio, 4 wrist image, 4 primary image, 4 secondary, 4 action, 4 future proprio, 4 future wrist, 4 future primary, 4 future secondary)
+                    # chunk_duration=29,
                 ),
                 ema=dict(
                     enabled=False,

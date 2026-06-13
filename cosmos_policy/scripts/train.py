@@ -60,7 +60,8 @@ def launch(config: Config, args: argparse.Namespace) -> None:
     
     # dcp_path = "/home/cosmos/.cache/cosmos_policy/our_model/iter_000020000"
     # dcp_path = "/home/cosmos/.cache/imaginaire_output/cosmos_policy/cosmos_v2_finetune/debug/checkpoints/iter_000003000"
-    dcp_path = "/mnt/wangxiaofa/cosmos_policy_exp/cosmos_policy/cosmos_v2_finetune/0509_cosmos_policy_pretrain_lerobot_v21_ort6d/checkpoints/iter_000020000"
+    # dcp_path = "/mnt/wangxiaofa/cosmos_policy_exp/cosmos_policy/cosmos_v2_finetune/0509_cosmos_policy_pretrain_lerobot_v21_ort6d/checkpoints/iter_000020000"
+    dcp_path = None
     
     # Create the dataloaders.
     with data_loader_init():

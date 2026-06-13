@@ -1319,7 +1319,7 @@ class MultiDatasetforDistTraining(torch.utils.data.Dataset):
                         image_transforms = v2.Resize((final_image_size, final_image_size))
                     else:
                         image_transforms = None
-                    # image_transforms = v2.Resize((final_image_size, final_image_size))
+                    image_transforms = v2.Resize((final_image_size, final_image_size))
                     dataset = LeRobotDataset(
                         repo_id, 
                         root=data_root,

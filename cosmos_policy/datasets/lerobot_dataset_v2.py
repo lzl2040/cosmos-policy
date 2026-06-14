@@ -1266,7 +1266,7 @@ class MultiDatasetforDistTraining(torch.utils.data.Dataset):
             use_wrist_images: bool = True,
             use_third_person_images: bool = True,
             use_proprio: bool = True,
-            num_duplicates_per_image: int = 1,
+            num_duplicates_per_image: int = 4,
             rollout_data_dir: str = "",
             demonstration_sampling_prob: float = 0.5,
             success_rollout_sampling_prob: float = 0.5,

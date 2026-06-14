@@ -1687,7 +1687,7 @@ class MultiDatasetforDistTraining(torch.utils.data.Dataset):
         # prepare state and action
         item = self.prepare_action_state(item)
         # item = self.norm_data_with_quantile(item) # follow cosmos policy
-        item = self.norm_data_with_mean_std_ort6d(item)
+        item = self.norm_data_with_min_max_ort6d(item)
         
         # unified the image keys
         

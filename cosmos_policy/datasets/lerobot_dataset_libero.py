@@ -888,6 +888,7 @@ class LeRobotDataset(torch.utils.data.Dataset):
             # )
             frames = decode_video_frames(video_path, query_ts, self.tolerance_s, self.video_backend, 
                                          return_type="image", worker_count=10)
+            
             # print(vid_key, frames.shape)
             item[vid_key] = frames
 
@@ -1559,8 +1560,76 @@ class MultiDatasetforDistTraining(torch.utils.data.Dataset):
             state_start_dim = 16 + 30
             state_end_dim = 16 + 30 + 50
         else:
-            action_end_dim = 7
-            state_end_dim = 8
+            # for ort6d
+            action_end_dim = 10
+            state_end_dim = 10
+            # for euler and quant
+            # action_end_dim = 7
+            # state_end_dim = 8
+        
+        state_q01[state_start_dim:state_end_dim] = self.stats["observation.state"][key1][state_start_dim:state_end_dim]
+        state_q99[state_start_dim:state_end_dim] = self.stats["observation.state"][key2][state_start_dim:state_end_dim]
+        action_q01[action_start_dim:action_end_dim] = self.stats["action"][key1][action_start_dim:action_end_dim]
+        action_q99[action_start_dim:action_end_dim] = self.stats["action"][key2][action_start_dim:action_end_dim]
+        # action
+        denom = action_q99 - action_q01
+        denom = torch.where(
+            denom == 0, torch.tensor(1e-8), denom
+        )
+        item["action"] = 2.0 * (item["action"] - action_q01) / denom - 1.0
+        
+        # state
+        denom = state_q99 - state_q01
+        denom = torch.where(
+            denom == 0, torch.tensor(1e-8), denom
+        )
+        item["observation.state"] = 2.0 * (item["observation.state"] - state_q01) / denom - 1.0
+        return item
+    
+    
+    def norm_data_with_mean_std_ort6d(self, item):
+        key_mean = "mean"
+        key_std = "std"
+        state_mean = torch.ones(self.max_state_dim) * 0.0
+        state_std = torch.ones(self.max_state_dim) * 1.0
+        action_mean = torch.ones(self.max_action_dim) * 0.0
+        action_std = torch.ones(self.max_action_dim) * 1.0
+
+        if "agi" in item['dataset_name'] or "agilex" in item['dataset_name'] or "dual" in item['dataset_name']:
+            xyz_dims = [0, 1, 2, 10, 11, 12]
+        else:
+            xyz_dims = [0, 1, 2]
+        
+        
+        state_mean[xyz_dims] = self.stats["observation.state"][key_mean][xyz_dims].to(dtype=state_mean.dtype)
+        state_std[xyz_dims] = self.stats["observation.state"][key_std][xyz_dims].to(dtype=state_mean.dtype)
+        action_mean[xyz_dims] = self.stats["action"][key_mean][xyz_dims].to(dtype=state_mean.dtype)
+        action_std[xyz_dims] = self.stats["action"][key_std][xyz_dims].to(dtype=state_mean.dtype)
+        
+        item["action"] = (item["action"] - action_mean) / (action_std + 1e-8)
+        item["observation.state"] = (item["observation.state"] - state_mean)    / (state_std + 1e-8)
+        return item
+    
+    def norm_data_with_min_max_ort6d(self, item):
+        # key1 = "min"
+        # key2 = "max"
+        key1 = "min"
+        key2 = "max"
+        state_q01 = torch.ones(self.max_state_dim) * -1
+        state_q99 = torch.ones(self.max_state_dim)
+        action_q01 = torch.ones(self.max_action_dim) * -1
+        action_q99 = torch.ones(self.max_action_dim)
+        action_mask = torch.zeros(self.max_action_dim)
+        action_start_dim = 0
+        action_end_dim = 0
+        state_start_dim = 0
+        state_end_dim = 0
+        if "agi" in item['dataset_name'] or "agilex" in item['dataset_name'] or "dual" in item['dataset_name']:
+            action_end_dim = 20
+            state_end_dim = 20
+        else:
+            action_end_dim = 10
+            state_end_dim = 10
         
         state_q01[state_start_dim:state_end_dim] = self.stats["observation.state"][key1][state_start_dim:state_end_dim]
         state_q99[state_start_dim:state_end_dim] = self.stats["observation.state"][key2][state_start_dim:state_end_dim]
@@ -1617,7 +1686,8 @@ class MultiDatasetforDistTraining(torch.utils.data.Dataset):
         
         # prepare state and action
         item = self.prepare_action_state(item)
-        item = self.norm_data_with_quantile(item) # follow cosmos policy
+        # item = self.norm_data_with_quantile(item) # follow cosmos policy
+        item = self.norm_data_with_mean_std_ort6d(item)
         
         # unified the image keys
         
@@ -1652,6 +1722,7 @@ class MultiDatasetforDistTraining(torch.utils.data.Dataset):
         CURRENT_IDX = 0
         FUTURE_IDX = -1
         first_input_image = np.expand_dims(np.zeros_like(item[IMAGE_PRIMARY][CURRENT_IDX]), axis=0)
+        
         image_list.append(first_input_image)
         current_sequence_idx += 1
         

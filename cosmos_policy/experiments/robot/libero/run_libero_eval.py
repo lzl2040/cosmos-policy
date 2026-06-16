@@ -110,7 +110,6 @@ import json
 import logging
 import os
 import time
-import cv2
 import traceback
 from collections import deque
 from dataclasses import dataclass
@@ -471,7 +470,6 @@ def run_episode(
 
             # Prepare observation
             observation = prepare_observation(obs, resize_size, cfg.flip_images)
-            # cv2.imwrite("primary.png", observation["primary_image"])
             replay_images.append(observation["primary_image"])
             if replay_wrist_images is not None:
                 replay_wrist_images.append(observation["wrist_image"])
@@ -531,8 +529,6 @@ def run_episode(
                             f"Query {query_idx + 1}/{num_queries}: Action query time = {query_time:.3f} sec", log_file
                         )
                         return_dict["actions"] = action_return_dict["actions"]
-                        # return_dict["future_image_predictions"] = action_return_dict["future_image_predictions"]
-                        future_image_predictions_list.append(action_return_dict["future_image_predictions"])
                         actions_by_depth.append(return_dict["actions"])
                         
                         actions = action_return_dict["actions"]
@@ -607,6 +603,7 @@ def run_task(
     total_successes=0,
     log_file=None,
     res_log_file=None,
+    rollout_dir=None,
     device="cuda:0"
 ):
     """Run evaluation for a single task."""
@@ -666,14 +663,15 @@ def run_task(
             total_successes += 1
 
         # Save replay video
-        # if not success or task_successes % 10 == 0:
-        save_rollout_video(
-            replay_images,
-            total_episodes,
-            success=success,
-            task_description=task_description,
-            log_file=log_file,
-        )
+        if not success or task_successes % 10 == 0:
+            save_rollout_video(
+                replay_images,
+                total_episodes,
+                success=success,
+                task_description=task_description,
+                log_file=log_file,
+                rollout_dir=rollout_dir
+            )
 
         # Save replay video with future image predictions included
         future_primary_image_predictions = None
@@ -792,8 +790,6 @@ def eval_libero(cfg: PolicyEvalConfig) -> float:
     # If using serial inference, initialize model and Cosmos config
     else:
         model, cosmos_config = get_model(cfg, device)
-        # ace_decoder_path = "/home/cosmos/.cache/cosmos_policy/libero/ace_libero_decoder/step_5k/mp_rank_00_model_states.pt"
-        # model.load_ace_weights(ace_decoder_path)
         assert cfg.chunk_size == cosmos_config.dataloader_train.dataset.chunk_size, (
             f"Mismatch found between train and test chunk sizes! Train: {cosmos_config.dataloader_train.dataset.chunk_size}, Test: {cfg.chunk_size}"
         )
@@ -810,7 +806,7 @@ def eval_libero(cfg: PolicyEvalConfig) -> float:
     resize_size = get_image_resize_size(cfg.model_family)
 
     # Setup logging
-    log_file, local_log_filepath, run_id, res_log_file = setup_logging(
+    log_file, res_log_file, local_log_filepath, run_id = setup_logging(
         cfg=cfg,
         task_identifier=cfg.task_suite_name,
         log_dir=cfg.local_log_dir,
@@ -819,7 +815,7 @@ def eval_libero(cfg: PolicyEvalConfig) -> float:
         wandb_entity=cfg.wandb_entity,
         wandb_project=cfg.wandb_project,
     )
-    # res_log_file = log_file.replace(".txt", "_results.txt")
+    rollout_dir = os.path.join(cfg.local_log_dir, "rollouts", f"run-{run_id}")
     log_message(f"Eval config: {cfg}", log_file)
 
     # Log parallel inference configuration and start worker pool
@@ -878,6 +874,7 @@ def eval_libero(cfg: PolicyEvalConfig) -> float:
             total_successes,
             log_file,
             res_log_file,
+            rollout_dir,
             device
         )
 

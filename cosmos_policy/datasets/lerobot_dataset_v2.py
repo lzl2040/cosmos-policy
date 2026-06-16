@@ -1394,7 +1394,10 @@ class MultiDatasetforDistTraining(torch.utils.data.Dataset):
         print(self.stats)
         
         if self.stage == "finetune":
-            t5_text_embeddings_path = os.path.join(parent_dir, f"t5_embeddings_{data_mix}.pkl")
+            if "cup" in data_mix or "pizza" in data_mix or "block" in data_mix:
+                t5_text_embeddings_path = os.path.join(parent_dir, f"t5_embeddings_real_world.pkl")
+            else:
+                t5_text_embeddings_path = os.path.join(parent_dir, f"t5_embeddings_{data_mix}.pkl")
         else:
             t5_text_embeddings_path = os.path.join(parent_dir, f"t5_embeddings_pretrain.pkl")
         if os.path.exists(t5_text_embeddings_path):
@@ -1642,7 +1645,11 @@ class MultiDatasetforDistTraining(torch.utils.data.Dataset):
             # print(task_embeddings.shape)
             # task_embeddings = torch.squeeze(torch.zeros((1, 512, 1024)))
         else:
-            task_embeddings = torch.squeeze(self.t5_text_embeddings[item["task"]])
+            task_data = self.t5_text_embeddings[item["task"]]
+            if isinstance(task_data, np.ndarray):
+                task_embeddings = torch.from_numpy(task_data).squeeze()
+            else:
+                task_embeddings = torch.squeeze(self.t5_text_embeddings[item["task"]])
         
         action_dim = item["action"].shape[-1]
         if action_dim > 10:

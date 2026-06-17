@@ -40,6 +40,56 @@ from cosmos_policy._src.predict2.models.text2world_model import (
 from cosmos_policy.conditioner import Text2WorldCondition
 from cosmos_policy.modules.cosmos_sampler import CosmosPolicySampler
 from cosmos_policy.modules.hybrid_edm_sde import HybridEDMSDE
+from cosmos_policy.experiments.robot.cosmos_utils import extract_action_chunk_from_latent_sequence
+import numpy as np
+from scipy.spatial.transform import Rotation as R
+
+def ort6d_to_euler(ort6d, seq='xyz', degrees=False):
+    """
+    将 ort6d (6D rotation representation) 转换为欧拉角
+    
+    ort6d 格式：旋转矩阵前两列按行优先flatten
+    ort6d = R[:, 0:2].flatten() = [R[0,0], R[0,1], R[1,0], R[1,1], R[2,0], R[2,1]]
+    
+    支持两种输入格式：
+    - 单个旋转: shape (6,) -> 输出 (3,)
+    - 批量旋转: shape (N, 6) -> 输出 (N, 3)
+    
+    Args:
+        ort6d: shape (6,) 或 (N, 6)
+        seq: 欧拉角的顺序，默认 'xyz'
+        degrees: 是否输出角度值，默认 False (输出弧度)
+    
+    Returns:
+        欧拉角: shape (3,) 或 (N, 3)
+    """
+    ort6d = np.array(ort6d)
+    original_shape = ort6d.shape
+    
+    # 如果是单个旋转 (6,)，转换为 (1, 6) 处理
+    if ort6d.ndim == 1:
+        ort6d = ort6d.reshape(1, 6)
+    
+    # 批量恢复旋转矩阵的前两列
+    # ort6d[:, 0], ort6d[:, 2], ort6d[:, 4] 是第一列
+    # ort6d[:, 1], ort6d[:, 3], ort6d[:, 5] 是第二列
+    col0 = np.stack([ort6d[:, 0], ort6d[:, 2], ort6d[:, 4]], axis=1)  # shape (N, 3)
+    col1 = np.stack([ort6d[:, 1], ort6d[:, 3], ort6d[:, 5]], axis=1)  # shape (N, 3)
+    
+    # 第三列通过叉积得到
+    col2 = np.cross(col0, col1)  # shape (N, 3)
+    
+    # 构建旋转矩阵 shape (N, 3, 3)
+    rotation_matrix = np.stack([col0, col1, col2], axis=2)
+    
+    # 转换为欧拉角
+    rotation = R.from_matrix(rotation_matrix)
+    euler = rotation.as_euler(seq, degrees=degrees)
+    
+    # 如果原始输入是单个旋转，返回 (3,)
+    if len(original_shape) == 1:
+        return euler[0]
+    return euler
 
 
 def replace_latent_with_action_chunk(
@@ -555,6 +605,26 @@ class CosmosPolicyDiffusionModel(BaseDiffusionModel):
         edm_loss_B_C_T_H_W = pred_mse_B_C_T_H_W * rearrange(weights_per_sigma_B_T, "b t -> b 1 t 1 1")
 
         kendall_loss = edm_loss_B_C_T_H_W
+        
+        
+        # action_shape = action_chunk.shape[1:]
+        # pred_actions = extract_action_chunk_from_latent_sequence(model_pred.x0, action_shape, action_indices)
+        # pred_actions = pred_actions.to(dtype=action_chunk.dtype)
+        # gt_action_10_dim = action_chunk[:, :, :10]
+        # pred_action_10_dim = pred_actions[:, :, :10]
+        # loss = ((pred_action_10_dim - gt_action_10_dim) ** 2).mean()
+        # print(f"Loss:{loss.item()}")
+        # pred_actions = pred_actions.to(dtype=torch.float32)
+        # pred_one_action = pred_actions[0] # chunk_size 32
+        # gt_one_action = action_chunk[0]
+        # pred_one_action = pred_one_action[:, :10].cpu().detach().numpy()
+        # gt_one_action = gt_one_action[:, :10].to(dtype=torch.float32).cpu().detach().numpy()
+        # pred_ort6d = pred_one_action[:, 3:3+6]
+        # gt_ort6d = gt_one_action[:, 3:3+6]
+        # pred_euler = ort6d_to_euler(pred_ort6d)[:2]
+        # gt_euler = ort6d_to_euler(gt_ort6d)[:2]
+        # print("pred:", pred_euler, "gt:", gt_euler)
+        
 
         # Apply the loss mask to the loss
         if (

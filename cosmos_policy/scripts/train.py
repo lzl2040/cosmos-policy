@@ -34,6 +34,13 @@ from cosmos_policy._src.imaginaire.serialization import to_yaml
 from cosmos_policy._src.imaginaire.utils import distributed
 from cosmos_policy._src.imaginaire.utils.context_managers import data_loader_init, distributed_init, model_init
 from cosmos_policy._src.imaginaire.utils.launch import log_reproducible_setup
+from cosmos_policy._src.imaginaire.utils.fsdp_helper import hsdp_device_mesh
+from cosmos_policy._src.predict2.checkpointer.dcp import (
+    DefaultLoadPlanner,
+    DistributedCheckpointer,
+    ModelWrapper,
+    dcp_load_state_dict,
+)
 
 import torch
 
@@ -55,8 +62,55 @@ def launch(config: Config, args: argparse.Namespace) -> None:
     # Setup the miscellaneous stuff for reproducibility.
     log_reproducible_setup(config, args)
 
+    ## default use fsdp ##
     with model_init():
         model = instantiate(config.model)
+    ## default use fsdp ##
+    
+    ## first not use fsdp for load pretrained weights
+    # fsdp_shard_size = config.model.config.fsdp_shard_size
+    # config.model.config.fsdp_shard_size = 1  # Set to 1 to disable FSDP during model instantiation.
+    # with model_init():
+    #     model = instantiate(config.model)
+    
+    # not success #
+    # pt_weight_path = "/home/cosmos/.cache/cosmos_policy/real_world/cup_task/model_8k.pt"
+    # # pt_weight_path = "/mnt/wangxiaofa/cosmos_policy_exp/cosmos_policy/cosmos_v2_finetune/0509_cosmos_policy_pretrain_lerobot_v21_ort6d/checkpoints/iter_20k.pt"
+    # state_dict = torch.load(pt_weight_path, map_location="cpu")
+    # model.load_state_dict(state_dict, strict=True)
+    # print(f"Successfully loaded model weights from {pt_weight_path}")
+    # not success #
+    
+    # it works #
+    # pt_path = "/home/cosmos/.cache/cosmos_policy/real_world/cup_task/iter_000008000/model"
+    # config.checkpoint.load_path = pt_path
+    # checkpointer = DistributedCheckpointer(config.checkpoint, config.job, callbacks=None, disable_async=True)
+
+    # _model_wrapper = ModelWrapper(
+    #     model,
+    #     load_ema_to_reg=False
+    # )
+    # _state_dict = _model_wrapper.state_dict()
+    # storage_reader = checkpointer.get_storage_reader(pt_path)
+    # load_planner = DefaultLoadPlanner(allow_partial_load=True)
+    # dcp_load_state_dict(_state_dict, storage_reader, load_planner)
+    # _model_wrapper.load_state_dict(_state_dict)
+    
+    # # If FSDP is enabled, apply FSDP to the model.
+    # if fsdp_shard_size > 1:
+    #     config.model.config.fsdp_shard_size = fsdp_shard_size
+    #     fsdp_device_mesh = hsdp_device_mesh(
+    #         sharding_group_size=fsdp_shard_size,
+    #     )
+    #     if hasattr(model, "apply_fsdp") and callable(model.apply_fsdp):
+    #         model.apply_fsdp(fsdp_device_mesh)
+    #     else:
+    #         raise AttributeError(
+    #             "Model does not implement 'apply_fsdp'. Please implement this method to enable FSDP after consolidated checkpoint loading."
+    #         )
+    # it workd #
+    
+    ## first not use fsdp for load pretrained weights
     
     # dcp_path = "/home/cosmos/.cache/cosmos_policy/our_model/iter_000020000"
     # dcp_path = "/home/cosmos/.cache/imaginaire_output/cosmos_policy/cosmos_v2_finetune/debug/checkpoints/iter_000003000"

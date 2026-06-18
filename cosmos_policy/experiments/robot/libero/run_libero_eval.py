@@ -806,7 +806,7 @@ def eval_libero(cfg: PolicyEvalConfig) -> float:
     resize_size = get_image_resize_size(cfg.model_family)
 
     # Setup logging
-    log_file, res_log_file, local_log_filepath, run_id = setup_logging(
+    log_file, local_log_filepath, run_id, res_log_file = setup_logging(
         cfg=cfg,
         task_identifier=cfg.task_suite_name,
         log_dir=cfg.local_log_dir,

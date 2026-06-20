@@ -116,7 +116,7 @@ def decode_video_frames(
     if backend == "torchcodec":
         return decode_video_frames_torchcodec(video_path, timestamps, tolerance_s, return_type=return_type, worker_count=worker_count)
     elif backend in ["pyav", "video_reader"]:
-        return decode_video_frames_torchvision(video_path, timestamps, tolerance_s, backend)
+        return decode_video_frames_torchvision(video_path, timestamps, tolerance_s, backend, return_type=return_type)
     else:
         raise ValueError(f"Unsupported video backend: {backend}")
 
@@ -196,13 +196,13 @@ def decode_video_frames_torchcodec(
     # timestamps = [timestamps[0], timestamps[-1]]
     num_frames = decoder._num_frames
 
-    frame_indices = [
-        min(round(ts * average_fps), num_frames - 1)
-        for ts in timestamps
-    ]
-    frame_indices = [frame_indices[0], frame_indices[-1]]
-    # frame_indices = [round(ts * average_fps) for ts in timestamps]
+    # frame_indices = [
+    #     min(round(ts * average_fps), num_frames - 1)
+    #     for ts in timestamps
+    # ]
     # frame_indices = [frame_indices[0], frame_indices[-1]]
+    frame_indices = [round(ts * average_fps) for ts in timestamps]
+    frame_indices = [frame_indices[0], frame_indices[-1]]
     # retrieve frames based on indices
     frames_batch = decoder.get_frames_at(indices=frame_indices)
 
@@ -214,9 +214,9 @@ def decode_video_frames_torchcodec(
 
     # query_ts = torch.tensor(timestamps)
     # loaded_ts = torch.tensor(loaded_ts)
-    # print(len(loaded_ts), query_ts)
+    # # print(len(loaded_ts), query_ts)
 
-    # compute distances between each query timestamp and loaded timestamps
+    # # compute distances between each query timestamp and loaded timestamps
     # dist = torch.cdist(query_ts[:, None], loaded_ts[:, None], p=1)
     # min_, argmin_ = dist.min(1)
 
@@ -232,7 +232,7 @@ def decode_video_frames_torchcodec(
     #         f"\nvideo: {video_path}"
     #     )
 
-    # get closest frames to the query timestamps
+    # # get closest frames to the query timestamps
     # closest_frames = torch.stack([loaded_frames[idx] for idx in argmin_])
     # closest_ts = loaded_ts[argmin_]
 
@@ -463,41 +463,6 @@ def decode_video_frames_torchvision(
                 # print(current_ts, first_ts, len(loaded_frames))
         except Exception as e:
             print(f"Frame decode error: {e} from {video_path} using fallback ones tensor.")
-        
-        # reader_iter = iter(reader)
-
-        # for _ in range(max_frame_window):
-        #     try:
-        #         frame = next(reader_iter)   # 关键：显式 next 才能捕获异常
-        #         current_ts = frame['pts']
-        #         tensor = frame["data"]  # (C,H,W)
-
-        #         if log_loaded_timestamps:
-        #             logging.info(f"frame loaded at timestamp={current_ts:.4f}")
-
-        #         loaded_frames.append(frame["data"])
-        #         loaded_ts.append(current_ts)
-
-        #     except StopIteration:
-        #         # 视频已读完，直接退出，不补帧
-        #         logging.info("Video finished early. Stop reading.")
-        #         break
-
-        #     except Exception as e:
-        #         # 解码错误时：补一个全 1 tensor
-        #         logging.warning(f"Frame decode error: {e} from {video_path} using fallback ones tensor.")
-        #         print(f"Frame decode error: {e} from {video_path} using fallback ones tensor.")
-        #         if len(loaded_frames) > 0:
-        #             ones_frame = torch.ones_like(loaded_frames[0])
-        #         else:
-        #             # 如果第一帧就坏，必须给定 frame_shape
-        #             meta = reader.get_metadata()
-        #             w = meta["video"]["width"]
-        #             h = meta["video"]["height"]
-        #             ones_frame = torch.ones((3, h, w), dtype=torch.uint8)
-
-        #         loaded_frames.append(ones_frame)
-        #         loaded_ts.append(-1)
 
     if backend == "pyav":
         reader.container.close()
@@ -571,7 +536,7 @@ def decode_video_frames_torchvision(
                 img = loaded_frames[idx].numpy().astype(np.uint8).transpose(1, 2, 0)
                 image_list.append(img)
             return image_list
-
+        
 def encode_video_frames(
     imgs_dir: Path | str,
     video_path: Path | str,

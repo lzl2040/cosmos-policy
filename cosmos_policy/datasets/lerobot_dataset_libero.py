@@ -889,7 +889,7 @@ class LeRobotDataset(torch.utils.data.Dataset):
             frames = decode_video_frames(video_path, query_ts, self.tolerance_s, self.video_backend, 
                                          return_type="image", worker_count=10)
             
-            # print(vid_key, frames.shape)
+            # print(vid_key, len(frames))
             item[vid_key] = frames
 
         return item
@@ -1394,7 +1394,8 @@ class MultiDatasetforDistTraining(torch.utils.data.Dataset):
             # t5_text_embeddings_path = os.path.join(parent_dir, f"t5_embeddings_{data_mix}.pkl")
             # for real-world
             if "cup" in data_mix or "pizza" in data_mix or "block" in data_mix:
-                t5_text_embeddings_path = "/mnt/wangxiaofa/robot_dataset/lerobot-format-v21-ort6d/t5_embeddings/t5_embeddings_real_world.pkl"
+                # t5_text_embeddings_path = "/mnt/wangxiaofa/robot_dataset/lerobot-format-v21-ort6d/t5_embeddings/t5_embeddings_real_world.pkl"
+                t5_text_embeddings_path = os.path.join(parent_dir, f"t5_embeddings_real_world.pkl")
             else:
                 t5_text_embeddings_path = os.path.join(parent_dir, f"t5_embeddings_{data_mix}.pkl")
         else:
@@ -1552,23 +1553,33 @@ class MultiDatasetforDistTraining(torch.utils.data.Dataset):
         if "agi" in item['dataset_name']:
             action_end_dim = 14
             state_end_dim = 16
+            action_range = list(range(state_start_dim, action_end_dim))
+            state_range = list(range(state_start_dim, state_end_dim))
         elif "ego_dex" in item['dataset_name']:
             action_start_dim = 0
             action_end_dim = 14 + 30
             state_start_dim = 0
             state_end_dim = 16 + 30
+            action_range = list(range(state_start_dim, action_end_dim))
+            state_range = list(range(state_start_dim, state_end_dim))
         elif "game" in item["dataset_name"]:
             action_start_dim = 14 + 30
             action_end_dim = 14 + 30 + 50
             state_start_dim = 16 + 30
             state_end_dim = 16 + 30 + 50
+            action_range = list(range(state_start_dim, action_end_dim))
+            state_range = list(range(state_start_dim, state_end_dim))
+        elif "cup" in item["dataset_name"]:
+            # cup_4hz is 17 dim
+            action_end_dim = 17
+            state_end_dim = 17
         else:
-            # for ort6d
-            action_end_dim = 10
-            state_end_dim = 10
-            # for euler and quant
-            # action_end_dim = 7
-            # state_end_dim = 8
+            # for euler and quat
+            action_end_dim = 7
+            state_end_dim = 8
+            action_range = list(range(state_start_dim, action_end_dim))
+            state_range = list(range(state_start_dim, state_end_dim))
+        
         
         state_q01[state_start_dim:state_end_dim] = self.stats["observation.state"][key1][state_start_dim:state_end_dim]
         state_q99[state_start_dim:state_end_dim] = self.stats["observation.state"][key2][state_start_dim:state_end_dim]
@@ -1689,8 +1700,13 @@ class MultiDatasetforDistTraining(torch.utils.data.Dataset):
         
         # prepare state and action
         item = self.prepare_action_state(item)
-        # item = self.norm_data_with_quantile(item) # follow cosmos policy
-        item = self.norm_data_with_mean_std_ort6d(item)
+        item = self.norm_data_with_quantile(item) # follow cosmos policy
+        if "cup" in dataset_name:
+            state_range = [0, 1, 2, 6, 7, 8, 9, 16] # xyz+quat+gripper
+            action_range = [0, 1, 2, 3, 4, 5, 16] # xyz+rpy+gripper
+            item["observation.state"] = item["observation.state"][state_range]
+            item["action"] = item["action"][:, action_range]
+        # item = self.norm_data_with_mean_std_ort6d(item)
         # item = self.norm_data_with_min_max_ort6d(item)
         
         # unified the image keys

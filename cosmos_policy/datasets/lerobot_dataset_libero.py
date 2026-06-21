@@ -1705,7 +1705,8 @@ class MultiDatasetforDistTraining(torch.utils.data.Dataset):
         if "cup" in dataset_name:
             state_range = [0, 1, 2, 6, 7, 8, 9, 16] # xyz+quat+gripper
             action_range = [0, 1, 2, 3, 4, 5, 16] # xyz+rpy+gripper
-            item["observation.state"] = item["observation.state"][state_range]
+            # print(item["observation.state"].shape, item["action"].shape)
+            item["observation.state"] = item["observation.state"][:, state_range]
             item["action"] = item["action"][:, action_range]
         # item = self.norm_data_with_mean_std_ort6d(item)
         # item = self.norm_data_with_min_max_ort6d(item)

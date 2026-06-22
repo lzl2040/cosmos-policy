@@ -375,6 +375,10 @@ OXE_NAMED_MIXTURES: Dict[str, List[Tuple[str, float]]] = {
         ("taco_play", 2.0),
         # ("rh20t", 1.0)
      ],
+     "debug_data": [
+        ("stanford_hydra_dataset_converted_externally_to_rlds", 2.0),
+        ("austin_buds_dataset_converted_externally_to_rlds", 1.0),
+     ],
      "fractal_only": [
          ("fractal20220817_data", 1.0), 
      ],
@@ -474,6 +478,9 @@ OXE_NAMED_MIXTURES: Dict[str, List[Tuple[str, float]]] = {
      ],
      "pizza_sub1":[
          ("pizza_sub1", 1.0),  
+     ],
+     "pizza_sub1_hz_2.5":[
+         ("pizza_sub1_hz_2.5", 1.0),  
      ],
      "pizza_sub2":[
          ("pizza_sub2", 1.0),  

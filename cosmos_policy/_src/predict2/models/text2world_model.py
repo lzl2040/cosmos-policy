@@ -163,7 +163,7 @@ class DiffusionModel(ImaginaireModel):
         
         # for b200 81
         # 0614_train_ace: all v21 data, interna1 weight increase, franka decrease
-        ace_pt_path = "/mnt/pvc/msra-training_data/weights/pt_ace/0614_train_ace/step_40k/mp_rank_00_model_states.pt"
+        ace_pt_path = "/mnt/pvc/msra-training_data/weights/pt_ace/0614_train_ace/step_6k/mp_rank_00_model_states.pt"
         # ace_pt_path = "/mnt/pvc/msra-training_data/weights/pt_ace/0522_ace/step_22k/mp_rank_00_model_states.pt"
         vision_model_name: str = "/mnt/pvc/msra-training_data/weights/siglip2-base-patch16-224/"
         # for b200 03

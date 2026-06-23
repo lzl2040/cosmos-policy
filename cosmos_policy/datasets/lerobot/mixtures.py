@@ -413,7 +413,7 @@ OXE_NAMED_MIXTURES: Dict[str, List[Tuple[str, float]]] = {
         ("sauce_full", 1.0),
         ("pizza_sub1", 1.0),
         ("pizza_sub2", 1.0),
-        # ("pizza_sub3", 1.0)
+        ("pizza_sub3", 1.0)
     ],
 
     # === T-DROID Dataset ===

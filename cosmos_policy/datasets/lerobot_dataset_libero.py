@@ -1397,6 +1397,8 @@ class MultiDatasetforDistTraining(torch.utils.data.Dataset):
             if "cup" in data_mix or "pizza" in data_mix or "block" in data_mix:
                 # t5_text_embeddings_path = "/mnt/wangxiaofa/robot_dataset/lerobot-format-v21-ort6d/t5_embeddings/t5_embeddings_real_world.pkl"
                 t5_text_embeddings_path = os.path.join(parent_dir, f"t5_embeddings_real_world.pkl")
+                if not os.path.exists(t5_text_embeddings_path):
+                    t5_text_embeddings_path = os.path.join(parent_dir, "t5_embeddings", f"t5_embeddings_real_world.pkl")
             else:
                 t5_text_embeddings_path = os.path.join(parent_dir, f"t5_embeddings_{data_mix}.pkl")
         else:

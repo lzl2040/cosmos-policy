@@ -64,8 +64,8 @@ def launch(config: Config, args: argparse.Namespace) -> None:
 
     # dcp_path = "/mnt/pvc/msra-training_data/cosmos_policy_exp/cosmos_policy/cosmos_v2_finetune/0510-world-stage1-pt/checkpoints/iter_000011000"
     # dcp_path = "/mnt/pvc/robo_home/lzl_ckpts/world_pt_weights/0518-world-pt-wo-action-decoder/iter_000005000"
-    dcp_path = "/mnt/pvc/msra-training_data/cosmos_policy_exp/cosmos_policy/cosmos_v2_finetune/0605-world-ace-22k-pt-world-modeling/checkpoints/iter_000011000"
-    # dcp_path = None
+    # dcp_path = "/mnt/pvc/msra-training_data/cosmos_policy_exp/cosmos_policy/cosmos_v2_finetune/0605-world-ace-22k-pt-world-modeling/checkpoints/iter_000011000"
+    dcp_path = None
     
     # Create the dataloaders.
     with data_loader_init():

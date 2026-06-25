@@ -1318,7 +1318,7 @@ class MultiDatasetforDistTraining(torch.utils.data.Dataset):
                         image_transforms = v2.Resize((final_image_size, final_image_size))
                     else:
                         image_transforms = None
-                    # image_transforms = v2.Resize((final_image_size, final_image_size))
+                    image_transforms = v2.Resize((final_image_size, final_image_size))
                     dataset = LeRobotDataset(
                         repo_id, 
                         root=data_root,
@@ -1393,12 +1393,18 @@ class MultiDatasetforDistTraining(torch.utils.data.Dataset):
         print(self.stats)
         
         if self.stage == "finetune":
-            t5_text_embeddings_path = os.path.join(parent_dir, f"t5_embeddings_{data_mix}.pkl")
+            if "cup" in data_mix or "pizza" in data_mix or "block" in data_mix:
+                t5_text_embeddings_path = os.path.join(parent_dir, f"t5_embeddings_real_world.pkl")
+            else:
+                t5_text_embeddings_path = os.path.join(parent_dir, f"t5_embeddings_{data_mix}.pkl")
+            if not os.path.exists(t5_text_embeddings_path):
+                t5_text_embeddings_path = os.path.join(parent_dir, "t5_embeddings", f"t5_embeddings_{data_mix}.pkl")
         else:
             t5_text_embeddings_path = os.path.join(parent_dir, f"t5_embeddings_pretrain.pkl")
         if os.path.exists(t5_text_embeddings_path):
             with open(t5_text_embeddings_path, "rb") as file:
                 self.t5_text_embeddings = pickle.load(file)
+        
         self.t5_text_embeddings_dir = os.path.join(parent_dir, "t5_embeddings")
         
         # other property

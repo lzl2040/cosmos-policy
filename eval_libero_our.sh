@@ -1,7 +1,7 @@
 uv run --no-sync --extra cu128 --group libero --python 3.10 \
   python -m cosmos_policy.experiments.robot.libero.run_libero_eval \
     --config cosmos_predict2_2b_480p_libero__inference_only \
-    --ckpt_path "/home/cosmos/.cache/cosmos_policy/libero/0530-world-libero-wan-vae-w-world-sample-aloss-weight-5/iter_000024000/model" \
+    --ckpt_path "/home/cosmos/.cache/cosmos_policy/libero/0618_mean_std_cosmos_ace_action_encoder/iter_000010000/model" \
     --config_file cosmos_policy/config/config.py \
     --use_wrist_image True \
     --use_proprio True \

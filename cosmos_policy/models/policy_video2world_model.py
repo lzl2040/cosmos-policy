@@ -65,7 +65,7 @@ class CosmosPolicyVideo2WorldConfig(CosmosPolicyModelConfig):
     low_sigma_ratio: float = 0.05  # Ratio of low sigma frames
     conditional_frames_probs: Optional[Dict[int, float]] = None  # Probability distribution for conditional frames
 
-    dcp_pretrain_path: str = None
+    dcp_pretrain_path: str = ""
     
     def __attrs_post_init__(self):
         super().__attrs_post_init__()

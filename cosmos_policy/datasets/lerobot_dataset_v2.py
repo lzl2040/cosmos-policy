@@ -1395,10 +1395,12 @@ class MultiDatasetforDistTraining(torch.utils.data.Dataset):
         if self.stage == "finetune":
             if "cup" in data_mix or "pizza" in data_mix or "block" in data_mix:
                 t5_text_embeddings_path = os.path.join(parent_dir, f"t5_embeddings_real_world.pkl")
+                if not os.path.exists(t5_text_embeddings_path):
+                    t5_text_embeddings_path = os.path.join(parent_dir, "t5_embeddings", f"t5_embeddings_real_world.pkl")
             else:
                 t5_text_embeddings_path = os.path.join(parent_dir, f"t5_embeddings_{data_mix}.pkl")
-            if not os.path.exists(t5_text_embeddings_path):
-                t5_text_embeddings_path = os.path.join(parent_dir, "t5_embeddings", f"t5_embeddings_{data_mix}.pkl")
+                if not os.path.exists(t5_text_embeddings_path):
+                    t5_text_embeddings_path = os.path.join(parent_dir, "t5_embeddings", f"t5_embeddings_{data_mix}.pkl")
         else:
             t5_text_embeddings_path = os.path.join(parent_dir, f"t5_embeddings_pretrain.pkl")
         if os.path.exists(t5_text_embeddings_path):

@@ -8,6 +8,7 @@ MAX_STATE_dIM=32
 DATASET_LEN=5000_0000
 ACC_STEP=2
 PARENT_DIR="/mnt/wangxiaofa/robot_dataset/lerobot-format"
+DCP_PT_PATH=""
 
 # 解析命令行参数
 while [[ $# -gt 0 ]]; do
@@ -64,6 +65,10 @@ while [[ $# -gt 0 ]]; do
             PARENT_DIR="$2"
             shift 2
             ;;
+        --dcp_pt_path)
+            DCP_PT_PATH="$2"
+            shift 2
+            ;;
         --acc_step)
             ACC_STEP="$2"
             shift 2
@@ -87,6 +92,7 @@ uv run --no-sync --extra cu128 --group libero --python 3.10 \
   --config=cosmos_policy/config/config.py --job_name=$JOB_NAME -- \
   experiment="cosmos_predict2_2b_480p_libero" \
   trainer.grad_accum_iter=$ACC_STEP \
+  model.config.dcp_pretrain_path=$DCP_PT_PATH \
   dataloader_train.batch_size=$BATCH_SIZE \
   dataloader_train.dataset.data_mix=$DATA_MIX \
   dataloader_train.dataset.stage=$STAGE \

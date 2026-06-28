@@ -120,6 +120,7 @@ cosmos_predict2_2b_480p_libero = LazyDict(
         ),
         model=L(CosmosPolicyVideo2WorldModel)(
             config=dict(
+                dcp_pretrain_path=None,
                 conditioner=dict(
                     text=dict(
                         # IMPORTANT: We don't want any text dropout; otherwise, the model may fail to follow language

@@ -28,6 +28,8 @@ from fractions import Fraction
 from pathlib import Path
 from threading import Lock
 from typing import Any, ClassVar
+import os
+from collections import OrderedDict
 
 import av
 import fsspec
@@ -399,6 +401,7 @@ def decode_video_frames(
     timestamps: list[float],
     tolerance_s: float,
     backend: str | None = None,
+    return_type: str = "tensor"
 ) -> torch.Tensor:
     """
     Decodes video frames using the specified backend.
@@ -417,9 +420,9 @@ def decode_video_frames(
     if backend is None:
         backend = get_safe_default_codec()
     if backend == "torchcodec":
-        return decode_video_frames_torchcodec(video_path, timestamps, tolerance_s)
+        return decode_video_frames_torchcodec(video_path, timestamps, tolerance_s, return_type=return_type)
     elif backend in ["pyav", "video_reader"]:
-        return decode_video_frames_torchvision(video_path, timestamps, tolerance_s, backend)
+        return decode_video_frames_torchvision(video_path, timestamps, tolerance_s, backend, return_type=return_type)
     else:
         raise ValueError(f"Unsupported video backend: {backend}")
 
@@ -429,6 +432,8 @@ def decode_video_frames_torchvision(
     timestamps: list[float],
     tolerance_s: float,
     backend: str = "pyav",
+    return_uint8: bool = False,
+    return_type: str = "tensor",
     log_loaded_timestamps: bool = False,
 ) -> torch.Tensor:
     """Loads frames associated to the requested timestamps of a video
@@ -516,52 +521,130 @@ def decode_video_frames_torchvision(
     if log_loaded_timestamps:
         logger.info(f"{closest_ts=}")
 
-    # convert to the pytorch format which is float32 in [0,1] range (and channel first)
-    closest_frames = closest_frames.type(torch.float32) / 255
+    if return_type == "tensor":
+        # get closest frames to the query timestamps
+        closest_frames = torch.stack([loaded_frames[idx] for idx in argmin_])
+        closest_ts = loaded_ts[argmin_]
 
-    if len(timestamps) != len(closest_frames):
-        raise FrameTimestampError(
-            f"Number of retrieved frames ({len(closest_frames)}) does not match "
-            f"number of queried timestamps ({len(timestamps)})"
-        )
-    return closest_frames
+        if log_loaded_timestamps:
+            logging.info(f"{closest_ts=}")
 
+        # convert to the pytorch format which is float32 in [0,1] range (and channel first)
+        # closest_frames = closest_frames.type(torch.float32) / 255
+        assert len(timestamps) == len(closest_frames)
+        
+        return closest_frames
+    elif return_type == "image":
+        image_list = []
+        for idx in argmin_:
+            img = Image.fromarray(loaded_frames[idx].numpy().astype(np.uint8).transpose(1, 2, 0))
+            image_list.append(img)
+        return image_list
+    elif return_type == "numpy":
+        image_list = []
+        for idx in argmin_:
+            img = loaded_frames[idx].numpy().astype(np.uint8).transpose(1, 2, 0)
+            image_list.append(img)
+        return image_list
+    
+    # if not return_uint8:
+    #     # convert to the pytorch format which is float32 in [0,1] range (and channel first)
+    #     closest_frames = closest_frames.type(torch.float32) / 255
+
+    # if len(timestamps) != len(closest_frames):
+    #     raise FrameTimestampError(
+    #         f"Number of retrieved frames ({len(closest_frames)}) does not match "
+    #         f"number of queried timestamps ({len(timestamps)})"
+    #     )
+    # return closest_frames
+
+
+DEFAULT_DECODER_CACHE_SIZE = 100
+def _default_max_cache_size() -> int | None:
+    raw = os.environ.get("LEROBOT_VIDEO_DECODER_CACHE_SIZE")
+    if raw is None:
+        return DEFAULT_DECODER_CACHE_SIZE
+    raw = raw.strip().lower()
+    if raw in ("", "none", "unbounded", "-1"):
+        return None
+    try:
+        value = int(raw)
+    except ValueError as e:
+        raise ValueError(
+            f"LEROBOT_VIDEO_DECODER_CACHE_SIZE must be an integer, 'none', or '-1'; got {raw!r}"
+        ) from e
+    if value <= 0:
+        raise ValueError(f"LEROBOT_VIDEO_DECODER_CACHE_SIZE must be positive; got {value}")
+    return value
 
 class VideoDecoderCache:
-    """Thread-safe cache for video decoders to avoid expensive re-initialization."""
+    """Thread-safe LRU cache for torchcodec ``VideoDecoder`` instances.
 
-    def __init__(self):
-        self._cache: dict[str, tuple[Any, Any]] = {}
+    Cached entries hold a ``VideoDecoder`` plus the open ``fsspec`` file handle
+    backing it. When the cache is full and a new path is requested, the
+    least-recently-used entry is evicted and its file handle is closed. This
+    bounds host-RAM growth when iterating over datasets with many distinct
+    video files (otherwise each ``DataLoader`` worker pins every decoder it has
+    ever opened until the process exits).
+
+    Args:
+        max_size: Maximum number of decoders to retain. ``None`` disables
+            eviction and restores legacy unbounded behaviour. Defaults to the
+            value of ``LEROBOT_VIDEO_DECODER_CACHE_SIZE`` if set, otherwise
+            :data:`DEFAULT_DECODER_CACHE_SIZE`.
+    """
+
+    _SENTINEL: ClassVar[object] = object()
+
+    def __init__(self, max_size: int | None | object = _SENTINEL):
+        if max_size is VideoDecoderCache._SENTINEL:
+            max_size = _default_max_cache_size()
+        if max_size is not None and max_size <= 0:
+            raise ValueError(f"max_size must be positive or None; got {max_size}")
+        self.max_size: int | None = max_size  # type: ignore[assignment]
+        self._cache: OrderedDict[str, tuple[Any, Any]] = OrderedDict()
         self._lock = Lock()
 
+    def __contains__(self, video_path: object) -> bool:
+        with self._lock:
+            return str(video_path) in self._cache
+
     def get_decoder(self, video_path: str):
-        """Get a cached decoder or create a new one."""
+        """Get a cached decoder or create a new one, evicting LRU if at capacity."""
         if importlib.util.find_spec("torchcodec"):
             from torchcodec.decoders import VideoDecoder
         else:
-            raise ImportError("torchcodec is required but not available.")
+            raise ImportError(
+                "'torchcodec' is required but not installed. "
+                "Install it with: pip install 'lerobot[dataset]' (or uv pip install 'lerobot[dataset]')"
+            )
 
         video_path = str(video_path)
 
         with self._lock:
-            if video_path not in self._cache:
-                file_handle = fsspec.open(video_path).__enter__()
+            entry = self._cache.get(video_path)
+            if entry is not None:
+                self._cache.move_to_end(video_path)
+                return entry[0]
+
+            file_handle = fsspec.open(video_path).__enter__()
+            try:
                 decoder = VideoDecoder(file_handle, seek_mode="approximate")
-                self._cache[video_path] = (decoder, file_handle)
-
-            return self._cache[video_path][0]
-
-    def clear(self):
-        """Clear the cache and close file handles."""
-        with self._lock:
-            for _, file_handle in self._cache.values():
+            except Exception:
                 file_handle.close()
-            self._cache.clear()
+                raise
+            self._cache[video_path] = (decoder, file_handle)
 
-    def size(self) -> int:
-        """Return the number of cached decoders."""
-        with self._lock:
-            return len(self._cache)
+            # Evict LRU entries until we are back under the cap. We close
+            # evicted file handles immediately; the associated ``VideoDecoder``
+            # is released to the GC when its last reference goes away.
+            if self.max_size is not None:
+                while len(self._cache) > self.max_size:
+                    _evicted_path, (_evicted_decoder, evicted_handle) = self._cache.popitem(last=False)
+                    with contextlib.suppress(Exception):
+                        evicted_handle.close()
+
+            return decoder
 
 
 class FrameTimestampError(ValueError):
@@ -578,6 +661,7 @@ def decode_video_frames_torchcodec(
     timestamps: list[float],
     tolerance_s: float,
     log_loaded_timestamps: bool = False,
+    return_type: str = "tensor",
     decoder_cache: VideoDecoderCache | None = None,
 ) -> torch.Tensor:
     """Loads frames associated with the requested timestamps of a video using torchcodec.
@@ -649,15 +733,42 @@ def decode_video_frames_torchcodec(
     if log_loaded_timestamps:
         logger.info(f"{closest_ts=}")
 
-    # convert to float32 in [0,1] range
-    closest_frames = (closest_frames / 255.0).type(torch.float32)
+    
+    if return_type == "tensor":
+        # get closest frames to the query timestamps
+        closest_frames = torch.stack([loaded_frames[idx] for idx in argmin_])
+        closest_ts = loaded_ts[argmin_]
 
-    if not len(timestamps) == len(closest_frames):
-        raise FrameTimestampError(
-            f"Retrieved timestamps differ from queried {set(closest_frames) - set(timestamps)}"
-        )
+        if log_loaded_timestamps:
+            logging.info(f"{closest_ts=}")
 
-    return closest_frames
+        # convert to the pytorch format which is float32 in [0,1] range (and channel first)
+        # closest_frames = closest_frames.type(torch.float32) / 255
+        assert len(timestamps) == len(closest_frames)
+        
+        return closest_frames
+    elif return_type == "image":
+        image_list = []
+        for idx in argmin_:
+            img = Image.fromarray(loaded_frames[idx].numpy().astype(np.uint8).transpose(1, 2, 0))
+            image_list.append(img)
+        return image_list
+    elif return_type == "numpy":
+        image_list = []
+        for idx in argmin_:
+            img = loaded_frames[idx].numpy().astype(np.uint8).transpose(1, 2, 0)
+            image_list.append(img)
+        return image_list
+    
+    # # convert to float32 in [0,1] range
+    # closest_frames = (closest_frames / 255.0).type(torch.float32)
+
+    # if not len(timestamps) == len(closest_frames):
+    #     raise FrameTimestampError(
+    #         f"Retrieved timestamps differ from queried {set(closest_frames) - set(timestamps)}"
+    #     )
+
+    # return closest_frames
 
 
 def encode_video_frames(

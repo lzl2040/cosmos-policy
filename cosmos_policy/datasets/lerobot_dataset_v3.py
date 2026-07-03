@@ -107,6 +107,7 @@ class LeRobotDataset(torch.utils.data.Dataset):
         streaming_encoding: bool = False,
         encoder_queue_maxsize: int = 30,
         encoder_threads: int | None = None,
+        dataset_name: str = None
     ):
         """
         2 modes are available for instantiating this class, depending on 2 different use cases:
@@ -232,6 +233,7 @@ class LeRobotDataset(torch.utils.data.Dataset):
         """
         super().__init__()
         self.repo_id = repo_id
+        self.dataset_name = dataset_name
         self.root = Path(root) if root else HF_LEROBOT_HOME / repo_id
         self.image_transforms = image_transforms
         self.delta_timestamps = delta_timestamps
@@ -589,13 +591,18 @@ class LeRobotDataset(torch.utils.data.Dataset):
             shifted_query_ts = [from_timestamp + ts for ts in query_ts]
 
             video_path = self.root / self.meta.get_video_file_path(ep_idx, vid_key)
-            frames = decode_video_frames(video_path, shifted_query_ts, self.tolerance_s, self.video_backend)
+            frames = decode_video_frames(video_path, 
+                                         shifted_query_ts, 
+                                         self.tolerance_s, 
+                                         self.video_backend,
+                                         return_type="image")
             # try:
             #     frames = decode_video_frames(video_path, shifted_query_ts, self.tolerance_s, self.video_backend)
             # except Exception as e:
             #     print(f"{video_path} has error:{e}")
             #     frames = torch.zeros((1, 3, 224, 224))
-            item[vid_key] = frames.squeeze(0)
+            # item[vid_key] = frames.squeeze(0)
+            item[vid_key] = frames
 
         return item
 
@@ -648,6 +655,21 @@ class LeRobotDataset(torch.utils.data.Dataset):
         if "subtask_index" in self.features and self.meta.subtasks is not None:
             subtask_idx = item["subtask_index"].item()
             item["subtask"] = self.meta.subtasks.iloc[subtask_idx].name
+        
+        
+        item["dataset_name"] = self.dataset_name
+        # process action and observation.state from micro buy data
+        if "action" not in item.keys():
+            candidate_state_keys = ["observation.ee_ort6d_pos", "observations.ee_ort6d_pos", "observations.ee_6d_pos"]
+            for key in candidate_state_keys:
+                if key in item.keys():
+                    item["observation.state"] = item[key]
+                    break
+            candidate_action_keys = ["action.ee_ort6d_pos", "action.ee_6d_pos"]
+            for key in candidate_action_keys:
+                if key in item.keys():
+                    item["action"] = item[key]
+                    break
 
         return item
 

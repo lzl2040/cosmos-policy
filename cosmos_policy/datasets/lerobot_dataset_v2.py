@@ -81,6 +81,7 @@ from cosmos_policy.datasets.lerobot.compute_stats import compute_episode_stats, 
 from cosmos_policy.datasets.lerobot.data_utils import preprocess_image
 from cosmos_policy.datasets.lerobot.oxe_configs import OXE_DATASET_CONFIGS
 from cosmos_policy.datasets.lerobot.mixtures import OXE_NAMED_MIXTURES
+from cosmos_policy.datasets.lerobot_dataset_v3 import LeRobotDataset as LeRobotDatasetV30
 import hashlib
 from tabulate import tabulate
 
@@ -887,7 +888,7 @@ class LeRobotDataset(torch.utils.data.Dataset):
             # frames = decode_video_frames_torchvision(
             #     video_path, query_ts, self.tolerance_s, self.video_backend
             # )
-            frames = decode_video_frames(video_path, query_ts, self.tolerance_s, "pyav", 
+            frames = decode_video_frames(video_path, query_ts, self.tolerance_s, self.video_backend, 
                                          return_type="image", worker_count=10)
             # frames = decode_video_frames(video_path, query_ts, self.tolerance_s, "torchcodec", 
             #                              return_type="image", worker_count=10)
@@ -1319,15 +1320,28 @@ class MultiDatasetforDistTraining(torch.utils.data.Dataset):
                     else:
                         image_transforms = None
                     image_transforms = v2.Resize((final_image_size, final_image_size))
-                    dataset = LeRobotDataset(
-                        repo_id, 
-                        root=data_root,
-                        delta_timestamps=delta_timestamps,
-                        image_transforms=image_transforms,
-                        wrist_image_transforms=None,
-                        video_backend="torchcodec",
-                        dataset_name=dataset_name,
-                    )
+                    if "ms_data" not in dataset_name:
+                        dataset = LeRobotDataset(
+                            repo_id, 
+                            root=data_root,
+                            delta_timestamps=delta_timestamps,
+                            image_transforms=image_transforms,
+                            wrist_image_transforms=None,
+                            # video_backend="torchcodec", # it does not function
+                            video_backend="pyav",
+                            dataset_name=dataset_name,
+                        )
+                    else:
+                        dataset = LeRobotDatasetV30(
+                            repo_id, 
+                            root=data_root,
+                            delta_timestamps=delta_timestamps,
+                            image_transforms=image_transforms,
+                            wrist_image_transforms=None,
+                            # video_backend="torchcodec",
+                            video_backend="pyav",
+                            dataset_name=dataset_name,
+                        )
                     self.num_episodes += dataset.num_episodes
                     self.num_frames += dataset.num_frames
                     self.datasets.append(dataset)
@@ -1552,7 +1566,7 @@ class MultiDatasetforDistTraining(torch.utils.data.Dataset):
         item["observation.state"] = 2.0 * (item["observation.state"] - state_q01) / denom - 1.0
         return item
 
-    def norm_data_with_mean_std_ort6d(self, item):
+    def norm_data_with_mean_std_ort6d(self, item, raw_action_dim):
         key_mean = "mean"
         key_std = "std"
         state_mean = torch.ones(self.max_state_dim) * 0.0
@@ -1560,7 +1574,7 @@ class MultiDatasetforDistTraining(torch.utils.data.Dataset):
         action_mean = torch.ones(self.max_action_dim) * 0.0
         action_std = torch.ones(self.max_action_dim) * 1.0
 
-        if "agi" in item['dataset_name'] or "agilex" in item['dataset_name'] or "dual" in item['dataset_name']:
+        if raw_action_dim > 10:
             xyz_dims = [0, 1, 2, 10, 11, 12]
         else:
             xyz_dims = [0, 1, 2]
@@ -1665,7 +1679,7 @@ class MultiDatasetforDistTraining(torch.utils.data.Dataset):
         item = self.prepare_action_state(item)
         # cosmos policy use min-max
         # our use mean std
-        item = self.norm_data_with_mean_std_ort6d(item)
+        item = self.norm_data_with_mean_std_ort6d(item, action_dim)
         
         # unified the image keys
         

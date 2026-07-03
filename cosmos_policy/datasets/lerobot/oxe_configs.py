@@ -1115,4 +1115,56 @@ OXE_DATASET_CONFIGS = {
         "state_encoding": StateEncoding.POS_QUAT,
         "action_encoding": ActionEncoding.EEF_POS,
     },
+    
+    # ms buy data
+    "ms_data_scale":{
+        # "image_obs_keys": {"primary": "cam_high", "secondary": "cam_low", "wrist": "cam_right_wrist"},
+        "image_obs_keys": {"primary": "cam_high", "secondary": None, "wrist": None},
+        "depth_obs_keys": {"primary": None, "secondary": None, "wrist": None},
+        "state_obs_keys": ["proprio"],
+        "state_encoding": StateEncoding.POS_QUAT,
+        "action_encoding": ActionEncoding.EEF_POS,
+    },
+    "ms_data_xdof_1":{
+        # "image_obs_keys": {"primary": "cam_right", "secondary": "cam_top", "wrist": None},
+        "image_obs_keys": {"primary": "cam_top", "secondary": None, "wrist": None},
+        "depth_obs_keys": {"primary": None, "secondary": None, "wrist": None},
+        "state_obs_keys": ["proprio"],
+        "state_encoding": StateEncoding.POS_QUAT,
+        "action_encoding": ActionEncoding.EEF_POS,
+    },
+    "ms_data_xdof_2":{
+        "image_obs_keys": {"primary": "cam_top", "secondary": None, "wrist": None},
+        # "image_obs_keys": {"primary": "cam_right", "secondary": "cam_top", "wrist": None},
+        "depth_obs_keys": {"primary": None, "secondary": None, "wrist": None},
+        "state_obs_keys": ["proprio"],
+        "state_encoding": StateEncoding.POS_QUAT,
+        "action_encoding": ActionEncoding.EEF_POS,
+    },
+    "ms_data_xdof_3":{
+        "image_obs_keys": {"primary": "cam_top", "secondary": None, "wrist": None},
+        # "image_obs_keys": {"primary": "cam_right", "secondary": "cam_top", "wrist": None},
+        "depth_obs_keys": {"primary": None, "secondary": None, "wrist": None},
+        "state_obs_keys": ["proprio"],
+        "state_encoding": StateEncoding.POS_QUAT,
+        "action_encoding": ActionEncoding.EEF_POS,
+    },
+    
+    "ms_data_xdof_4":{
+        "image_obs_keys": {"primary": "cam_top", "secondary": None, "wrist": None},
+        # "image_obs_keys": {"primary": "cam_right", "secondary": "cam_top", "wrist": None},
+        "depth_obs_keys": {"primary": None, "secondary": None, "wrist": None},
+        "state_obs_keys": ["proprio"],
+        "state_encoding": StateEncoding.POS_QUAT,
+        "action_encoding": ActionEncoding.EEF_POS,
+    },
+    
+    "ms_data_xdof_5":{
+        "image_obs_keys": {"primary": "cam_top", "secondary": None, "wrist": None},
+        # "image_obs_keys": {"primary": "cam_right", "secondary": "cam_top", "wrist": None},
+        "depth_obs_keys": {"primary": None, "secondary": None, "wrist": None},
+        "state_obs_keys": ["proprio"],
+        "state_encoding": StateEncoding.POS_QUAT,
+        "action_encoding": ActionEncoding.EEF_POS,
+    },
 }

@@ -43,7 +43,7 @@ def encode_t5_text_embeddings(t5_model, t5_tokenizer, prompts, max_length, devic
 text_model_type = "t5"
 torch_dtype = torch.float32
 device = "cuda"
-data_mix = "real_world"
+data_mix = "ms_buy_v30"
 max_length = 512
 max_task_chunk = 40000
 
@@ -68,7 +68,7 @@ if text_model_type == "t5":
     text_encoder.eval()
 
     val2root_json_path = "vla2root.json"
-    data_root = "/mnt/wangxiaofa/robot_dataset/lerobot-format"
+    data_root = "/mnt/wangxiaofa/robot_dataset/lerobot-format-v30"
 
     mixture_sets = OXE_NAMED_MIXTURES[data_mix]
     process_datasets = []

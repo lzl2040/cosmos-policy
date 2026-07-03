@@ -85,5 +85,11 @@
     "interna1_single_arm": "InternA1/single_arm",
     "pizza_long": "pizza_sub_4_hz_4_unified_space",
     "block_full": "block_hz_4",
-    "sauce_full": "sauce_hz_4"
+    "sauce_full": "sauce_hz_4",
+    "ms_data_scale": "Micro_data/Trossen_Stationary_AI_480x640_padded_MERGED",
+    "ms_data_xdof_1": "Micro_data/full/XMI_MERGED",
+    "ms_data_xdof_2": "Micro_data/full/YAM_Box_MERGED",
+    "ms_data_xdof_3": "Micro_data/YAM_Station_MERGED",
+    "ms_data_xdof_4": "Micro_data/full/FR3_Duo_MERGED",
+    "ms_data_xdof_5": "Micro_data/full/UR_AI_Trainer_MERGED"
 }

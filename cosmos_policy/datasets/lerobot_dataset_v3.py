@@ -20,6 +20,7 @@ import shutil
 import tempfile
 from collections.abc import Callable
 from pathlib import Path
+import math
 
 import datasets
 import numpy as np
@@ -567,10 +568,11 @@ class LeRobotDataset(torch.utils.data.Dataset):
                 if self._absolute_to_relative_idx is None
                 else [self._absolute_to_relative_idx[idx] for idx in q_idx]
             )
-            try:
-                result[key] = torch.stack(self.hf_dataset[key][relative_indices])
-            except (KeyError, TypeError, IndexError):
-                result[key] = torch.stack(self.hf_dataset[relative_indices][key])
+            values = self.hf_dataset[key]
+            if isinstance(values, list):
+                result[key] = torch.stack([values[i] for i in relative_indices])
+            else:
+                result[key] = torch.stack(values[relative_indices])
         return result
 
     def _query_videos(self, query_timestamps: dict[str, list[float]], ep_idx: int) -> dict[str, torch.Tensor]:
@@ -658,6 +660,7 @@ class LeRobotDataset(torch.utils.data.Dataset):
         
         
         item["dataset_name"] = self.dataset_name
+        item["fps"] = math.ceil(self.meta.fps)
         # process action and observation.state from micro buy data
         if "action" not in item.keys():
             candidate_state_keys = ["observation.ee_ort6d_pos", "observations.ee_ort6d_pos", "observations.ee_6d_pos"]

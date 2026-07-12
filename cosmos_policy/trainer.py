@@ -69,7 +69,7 @@ class CosmosPolicyTrainer(ImaginaireTrainer):
         grad_scaler = torch.amp.GradScaler("cuda", **self.config.trainer.grad_scaler_args)
         self.callbacks.on_optimizer_init_end()
         # Load the model checkpoint and get the starting iteration number.
-        if pretrained_path is not None:
+        if len(pretrained_path) > 0:
             self.checkpointer.load_with_file(model, optimizer, scheduler, grad_scaler, checkpoint_path=pretrained_path)
             log.critical(f"Loading pretrained weights from {pretrained_path}...")
         iteration = self.checkpointer.load(model, optimizer, scheduler, grad_scaler)

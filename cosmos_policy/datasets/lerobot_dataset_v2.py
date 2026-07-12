@@ -82,6 +82,7 @@ from cosmos_policy.datasets.lerobot.data_utils import preprocess_image
 from cosmos_policy.datasets.lerobot.oxe_configs import OXE_DATASET_CONFIGS
 from cosmos_policy.datasets.lerobot.mixtures import OXE_NAMED_MIXTURES
 from cosmos_policy.datasets.lerobot_dataset_v3 import LeRobotDataset as LeRobotDatasetV30
+from cosmos_policy.datasets.lerobot_v3.dataset_metadata import LeRobotDatasetMetadata as LeRobotDatasetMetadataV30
 import hashlib
 from tabulate import tabulate
 
@@ -141,16 +142,21 @@ def resolve_delta_timestamps(ds_meta, chunk_size, use_reward=False):
     obs_indices = list(range(chunk_size))
     act_indices = list(range(chunk_size))
     rew_indices = list(range(chunk_size)) if use_reward else None
+    candidate_state_keys = ["observation.ee_ort6d_pos", "observations.ee_ort6d_pos", "observations.ee_6d_pos", "observation.state"]
+    candidate_action_keys = ["action.ee_ort6d_pos", "action.ee_6d_pos", "action"]
+            
 
     for key in ds_meta.features:
 
         if key == "next.reward" and rew_indices is not None:
             delta_timestamps[key] = [i / ds_meta.fps for i in rew_indices]
 
-        elif key == "action":
+        elif key in candidate_action_keys:
             delta_timestamps[key] = [i / ds_meta.fps for i in act_indices]
 
         elif key.startswith("observation."):
+            delta_timestamps[key] = [i / ds_meta.fps for i in obs_indices]
+        elif key in candidate_state_keys:
             delta_timestamps[key] = [i / ds_meta.fps for i in obs_indices]
 
     return delta_timestamps or None
@@ -1277,6 +1283,7 @@ class MultiDatasetforDistTraining(torch.utils.data.Dataset):
             stage: str = "finetune",
             data_mix: str = "libero",
             parent_dir: str = "",
+            parent_v30_dir: str = "",
             vla2root_json: str = "vla2root.json",
             balance_dataset_weights: bool = True,
             max_action_dim: int = 32,
@@ -1309,44 +1316,47 @@ class MultiDatasetforDistTraining(torch.utils.data.Dataset):
         for dataset_name in included_d_names:
             if dataset_name in vla2data_root.keys():
                 data_root = vla2data_root[dataset_name]
-                data_root = os.path.join(parent_dir, data_root)
-                if os.path.exists(data_root):
-                    print(f"Load data from {data_root}")
-                    repo_id = f"bulldog-{dataset_name}" # any
+                # data_root = os.path.join(parent_dir, data_root)
+                # if os.path.exists(data_root):
+                print(f"Load data from {data_root}")
+                repo_id = f"bulldog-{dataset_name}" # any
+                if self.stage == "pretrain":
+                    image_transforms = v2.Resize((final_image_size, final_image_size))
+                else:
+                    image_transforms = None
+                image_transforms = v2.Resize((final_image_size, final_image_size))
+                if "ms_data" not in dataset_name:
+                    data_root = os.path.join(parent_dir, data_root)
                     ds_meta = LeRobotDatasetMetadata(repo_id, root=data_root)
                     delta_timestamps = resolve_delta_timestamps(ds_meta, chunk_size)
-                    if self.stage == "pretrain":
-                        image_transforms = v2.Resize((final_image_size, final_image_size))
-                    else:
-                        image_transforms = None
-                    image_transforms = v2.Resize((final_image_size, final_image_size))
-                    if "ms_data" not in dataset_name:
-                        dataset = LeRobotDataset(
-                            repo_id, 
-                            root=data_root,
-                            delta_timestamps=delta_timestamps,
-                            image_transforms=image_transforms,
-                            wrist_image_transforms=None,
-                            # video_backend="torchcodec", # it does not function
-                            video_backend="pyav",
-                            dataset_name=dataset_name,
-                        )
-                    else:
-                        dataset = LeRobotDatasetV30(
-                            repo_id, 
-                            root=data_root,
-                            delta_timestamps=delta_timestamps,
-                            image_transforms=image_transforms,
-                            wrist_image_transforms=None,
-                            # video_backend="torchcodec",
-                            video_backend="pyav",
-                            dataset_name=dataset_name,
-                        )
-                    self.num_episodes += dataset.num_episodes
-                    self.num_frames += dataset.num_frames
-                    self.datasets.append(dataset)
-                    self.dataset_sizes.append(len(dataset))
-                    self.dataset_names.append(dataset_name)
+                    dataset = LeRobotDataset(
+                        repo_id, 
+                        root=data_root,
+                        delta_timestamps=delta_timestamps,
+                        image_transforms=image_transforms,
+                        wrist_image_transforms=None,
+                        # video_backend="torchcodec", # it does not function
+                        video_backend="pyav",
+                        dataset_name=dataset_name,
+                    )
+                else:
+                    data_root = os.path.join(parent_v30_dir, data_root)
+                    ds_meta = LeRobotDatasetMetadataV30(repo_id, root=data_root)
+                    delta_timestamps = resolve_delta_timestamps(ds_meta, chunk_size)
+                    dataset = LeRobotDatasetV30(
+                        repo_id, 
+                        root=data_root,
+                        delta_timestamps=delta_timestamps,
+                        image_transforms=image_transforms,
+                        # video_backend="torchcodec",
+                        video_backend="pyav",
+                        dataset_name=dataset_name,
+                    )
+                self.num_episodes += dataset.num_episodes
+                self.num_frames += dataset.num_frames
+                self.datasets.append(dataset)
+                self.dataset_sizes.append(len(dataset))
+                self.dataset_names.append(dataset_name)
             else:
                 print(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] - {dataset_name} not found in vla2root.json, skipping...")
 
@@ -1720,6 +1730,16 @@ class MultiDatasetforDistTraining(torch.utils.data.Dataset):
         # NOTE: proprio is no longer used as input or prediction target
         # proprio values are removed from the latent sequence
         current_proprio_latent_idx = -1
+        # current state
+        if self.use_proprio:
+            proprio = item[OBS_ROBOT][CURRENT_IDX]
+            # Proprio values will be injected into latent diffusion sequence later
+            # For now just add blank image
+            blank_image = np.zeros_like(item[IMAGE_PRIMARY][CURRENT_IDX])
+            blank_image = duplicate_array(blank_image, total_num_copies=self.num_duplicates_per_image)
+            image_list.append(blank_image)
+            current_proprio_latent_idx = current_sequence_idx
+            current_sequence_idx += 1
         
         if self.use_wrist_images:
             wrist_image = item[IMAGE_WRIST][CURRENT_IDX]
@@ -1755,15 +1775,24 @@ class MultiDatasetforDistTraining(torch.utils.data.Dataset):
         action_latent_idx = current_sequence_idx
         current_sequence_idx += 1
         
-        # future state
-        
         # NOTE: future_proprio is no longer used as prediction target
-        future_proprio_latent_idx = -1
-        
         # Get proprio values for sample_dict (even though they're not used as latent placeholders)
         proprio = item[OBS_ROBOT][CURRENT_IDX] if self.use_proprio else torch.zeros(self.max_state_dim)
         future_proprio = item[OBS_ROBOT][FUTURE_IDX] if self.use_proprio else torch.zeros(self.max_state_dim)
 
+        # future state
+        future_proprio_latent_idx = -1
+        # Add future proprio
+        if self.use_proprio:
+            future_proprio = item[OBS_ROBOT][FUTURE_IDX]
+            # Not using proprio image; proprio values will be injected into latent diffusion sequence later
+            # For now just add blank image
+            blank_image = np.zeros_like(item[IMAGE_PRIMARY][FUTURE_IDX])
+            blank_image = duplicate_array(blank_image, total_num_copies=self.num_duplicates_per_image)
+            image_list.append(blank_image)
+            future_proprio_latent_idx = current_sequence_idx
+            current_sequence_idx += 1
+        
         # Add future wrist image
         if self.use_wrist_images:
             future_wrist_image = item[IMAGE_WRIST][FUTURE_IDX]

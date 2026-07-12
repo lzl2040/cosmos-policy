@@ -65,6 +65,7 @@ libero_all_4_suites_dataset = L(MultiDatasetforDistTraining)(
     stage="finetune",
     data_mix="libero",
     parent_dir="/home/cosmos/.cache/lerobot_data",
+    parent_v30_dir="/home/cosmos/.cache/lerobot_data/v30",
     # parent_dir="/mnt/wangxiaofa/robot_dataset/lerobot-format",
     vla2root_json="vla2root.json",
     balance_dataset_weights=True,

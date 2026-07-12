@@ -1873,6 +1873,7 @@ class MultiDatasetforDistTraining(torch.utils.data.Dataset):
             "value_function_return": float("-100"),
             "sample_rate": sample_rate,
             "gripper_index": gripper_index,
+            "task": item["task"],
             # "next_action_chunk": next_action_chunk,
             # "next_value_function_return": next_value_function_return,
         }

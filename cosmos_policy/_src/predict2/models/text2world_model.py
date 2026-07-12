@@ -19,7 +19,7 @@ import collections
 import math
 import os
 from contextlib import contextmanager
-from typing import Any, Callable, Dict, Mapping, Optional, Tuple
+from typing import Any, Callable, Dict, List, Mapping, Optional, Tuple
 
 import attrs
 import numpy as np
@@ -171,8 +171,10 @@ class DiffusionModel(ImaginaireModel):
         
         # for b200 81
         # 0614_train_ace: all v21 data, interna1 weight increase, franka decrease
-        ace_pt_path = "/mnt/pvc/msra-training_data/weights/pt_ace/0614_train_ace/step_40k/mp_rank_00_model_states.pt"
+        # ace_pt_path = "/mnt/pvc/msra-training_data/weights/pt_ace/0614_train_ace/step_40k/mp_rank_00_model_states.pt"
         # ace_pt_path = "/mnt/pvc/msra-training_data/weights/pt_ace/0522_ace/step_22k/mp_rank_00_model_states.pt"
+        # with language
+        ace_pt_path = "/mnt/pvc/msra-training_data/ace_exp/0707-train-ace-full-exp1/0707-train-ace-full-exp1/global_step12000/mp_rank_00_model_states.pt"
         vision_model_name: str = "/mnt/pvc/msra-training_data/weights/siglip2-base-patch16-224/"
         # for b200 03
         ## Note this model input frame value max is 255, but in forward it multiple 255 again
@@ -760,7 +762,7 @@ class DiffusionModel(ImaginaireModel):
         # Latent state
         # raw_state: [8, 3, 37, 224, 224]
         raw_state = data_batch[self.input_image_key if is_image_batch else self.input_data_key]
-        output_dict = self.encode(raw_state)
+        output_dict = self.encode(raw_state, data_batch["task"])
         latent_state = output_dict["vae_feature"].contiguous().float() # [8, 9, 16, 28, 28]
         # latent_state = self.encode(raw_state).contiguous().float() # [4, 16, 9, 28, 28] # vae
         latent_state = latent_state.permute(0, 2, 1, 3, 4)  # [4, 16, 9, 28, 28]
@@ -1027,11 +1029,11 @@ class DiffusionModel(ImaginaireModel):
         return output_batch, kendall_loss, pred_mse_B_C_T_H_W, edm_loss_B_C_T_H_W
 
     @torch.no_grad()
-    def encode(self, state: torch.Tensor) -> torch.Tensor:
+    def encode(self, state: torch.Tensor, texts: List[str]) -> torch.Tensor:
         # print(state.device)
         # return self.tokenizer.encode(state) * self.sigma_data
         # return self.ace.vision_model(state)
-        return self.ace.vision_model(state)
+        return self.ace.vision_model(state, texts)
 
     # @torch.no_grad()
     # def decode(self, latent: torch.Tensor) -> torch.Tensor:

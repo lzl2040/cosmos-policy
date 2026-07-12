@@ -5,12 +5,13 @@ import torch.nn as nn
 import torch.nn.functional as F
 from typing import Optional, Dict, Tuple
 from torch import Tensor, nn
-from transformers import SiglipModel, AutoProcessor
+from transformers import SiglipModel, AutoProcessor, AutoModel, AutoTokenizer
 
 from cosmos_policy.models.ace_action import ActionChunkEncoder, ACEConfig
 from collections import deque
 from PIL import Image
 import math
+import os
 
 
 class SmallConvBottleneck(nn.Module):
@@ -27,7 +28,7 @@ class SmallConvBottleneck(nn.Module):
     ):
         super().__init__()
         self.out_hw = out_hw
-
+        # not change resolution
         self.net = nn.Sequential(
             nn.Conv2d(in_channels, mid_channels, kernel_size=1, stride=1, padding=0),
             nn.GroupNorm(num_groups=min(8, mid_channels), num_channels=mid_channels),
@@ -43,7 +44,17 @@ class SmallConvBottleneck(nn.Module):
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         # x: [B, D, H, W]
         x = self.net(x)
-        x = F.adaptive_avg_pool2d(x, self.out_hw)  # force target shape
+        H, W = x.shape[-2:]
+
+        if H > self.out_hw[0]:
+            x = F.adaptive_avg_pool2d(x, self.out_hw)
+        elif H < self.out_hw[0]:
+            x = F.interpolate(
+                x,
+                size=self.out_hw,
+                mode="bilinear",
+                align_corners=False,
+            ) 
         return x
 
 
@@ -66,6 +77,134 @@ class TokenFusionHead(nn.Module):
         x = torch.cat([cls_token, pooled_token], dim=-1)
         return self.fuse(x)
 
+class CrossAttentionBlock(nn.Module):
+    """
+    Cross Attention Block
+
+    Query : vision patch tokens
+    Key   : text tokens
+    Value : text tokens
+
+    Input
+        patch_tokens : (B, N, D)
+        text_tokens  : (B, L, D)
+
+    Output
+        patch_tokens : (B, N, D)
+    """
+
+    def __init__(
+        self,
+        dim=768,
+        num_heads=8,
+        mlp_ratio=4.0,
+        qkv_bias=True,
+        attn_drop=0.,
+        proj_drop=0.,
+    ):
+        super().__init__()
+
+        assert dim % num_heads == 0
+
+        self.dim = dim
+        self.num_heads = num_heads
+        self.head_dim = dim // num_heads
+        self.scale = self.head_dim ** -0.5
+
+        # ---------- LayerNorm ----------
+        self.norm_q = nn.LayerNorm(dim)
+        self.norm_kv = nn.LayerNorm(dim)
+
+        # ---------- QKV ----------
+        self.q_proj = nn.Linear(dim, dim, bias=qkv_bias)
+        self.k_proj = nn.Linear(dim, dim, bias=qkv_bias)
+        self.v_proj = nn.Linear(dim, dim, bias=qkv_bias)
+
+        # ---------- Output ----------
+        self.proj = nn.Linear(dim, dim)
+        self.attn_drop = nn.Dropout(attn_drop)
+        self.proj_drop = nn.Dropout(proj_drop)
+
+        # ---------- FFN ----------
+        hidden_dim = int(dim * mlp_ratio)
+
+        self.norm_ffn = nn.LayerNorm(dim)
+
+        self.ffn = nn.Sequential(
+            nn.Linear(dim, hidden_dim),
+            nn.GELU(),
+            nn.Dropout(proj_drop),
+            nn.Linear(hidden_dim, dim),
+            nn.Dropout(proj_drop),
+        )
+
+    def forward(
+        self,
+        patch_tokens,
+        text_tokens,
+    ):
+        """
+        patch_tokens : (B,N,D)
+        text_tokens  : (B,L,D)
+        """
+
+        ############################
+        # Cross Attention
+        ############################
+        residual = patch_tokens
+
+        q = self.norm_q(patch_tokens)
+        kv = self.norm_kv(text_tokens)
+
+        B, N, C = q.shape
+        _, L, _ = kv.shape
+
+        q = self.q_proj(q)
+        k = self.k_proj(kv)
+        v = self.v_proj(kv)
+
+        q = q.reshape(
+            B,
+            N,
+            self.num_heads,
+            self.head_dim,
+        ).transpose(1, 2)
+
+        k = k.reshape(
+            B,
+            L,
+            self.num_heads,
+            self.head_dim,
+        ).transpose(1, 2)
+
+        v = v.reshape(
+            B,
+            L,
+            self.num_heads,
+            self.head_dim,
+        ).transpose(1, 2)
+
+        attn = (q @ k.transpose(-2, -1)) * self.scale
+        attn = F.softmax(attn, dim=-1)
+        attn = self.attn_drop(attn)
+
+        x = attn @ v
+
+        x = x.transpose(1, 2).reshape(B, N, C)
+
+        x = self.proj(x)
+        x = self.proj_drop(x)
+
+        patch_tokens = residual + x
+
+        ############################
+        # FFN
+        ############################
+        patch_tokens = patch_tokens + self.ffn(
+            self.norm_ffn(patch_tokens)
+        )
+
+        return patch_tokens
 
 class VisionEncoder(nn.Module):
     """
@@ -88,11 +227,16 @@ class VisionEncoder(nn.Module):
     ):
         super().__init__()
 
-        self.model = SiglipModel.from_pretrained(
+        if not os.path.exists(model_name):
+            model_name = "google/siglip2-base-patch16-224"
+            print(f"Load Vision Encoder from {model_name}")
+        
+        self.model = AutoModel.from_pretrained(
             model_name,
             dtype=torch.float32
         )
         self.processor = AutoProcessor.from_pretrained(model_name)
+        self.tokenizer = AutoTokenizer.from_pretrained(model_name)
 
         # hidden size
         if hasattr(self.model, "config"):
@@ -119,6 +263,15 @@ class VisionEncoder(nn.Module):
 
         # projection for patch tokens before bottleneck
         self.patch_projection = nn.Identity()
+        
+        # vision-text fusion
+        self.cross_blocks = nn.ModuleList([
+            CrossAttentionBlock(
+                dim=self.hidden_size,
+                num_heads=8,
+            )
+            for _ in range(2)
+        ])
 
         # bottleneck to produce VAE-like feature
         self.bottleneck = SmallConvBottleneck(
@@ -136,6 +289,10 @@ class VisionEncoder(nn.Module):
         )
         self.vae_proj = nn.Linear(self.vae_channels, output_dim)
         self.tanh = nn.Tanh()
+        
+        # frozen text encoder
+        for param in self.model.text_model.parameters():
+            param.requires_grad = False
 
     def _infer_patch_grid(self, num_patch_tokens: int) -> Tuple[int, int]:
         """
@@ -150,7 +307,7 @@ class VisionEncoder(nn.Module):
             )
         return side, side
 
-    def forward(self, images: torch.Tensor) -> Dict[str, torch.Tensor]:
+    def forward(self, images: torch.Tensor, texts) -> Dict[str, torch.Tensor]:
         """
         Args:
             images: image tensor, usually [B, C, H, W] or list of PIL images
@@ -164,28 +321,46 @@ class VisionEncoder(nn.Module):
                 "patch_tokens":[B, N, D],
             }
         """
-        device = next(self.parameters()).device
-        
         B, C, T, H, W = images.shape
-        # print(f"Images:{images.shape}")
+        # print(f"Images shape: {images.shape}")
+        device = next(self.parameters()).device
         images = images.permute(0, 2, 1, 3, 4).contiguous()
         images = images.view(B * T, C, H, W).to(dtype=torch.float32)  # treat time
-
-        inputs = self.processor(images=images, return_tensors="pt")
+        # print(type(images[0]), type(images)) # tensor, tensor
+        inputs = self.processor(images=images, 
+                                return_tensors="pt")
         inputs = {
             k: v.to(device=device, dtype=self.dtype if v.is_floating_point() else v.dtype)
             for k, v in inputs.items()
         }
-
+        
         # vision_outputs.last_hidden_state:
         # often [B, 1+N, D], where first token is cls
-        vision_outputs = self.model.vision_model(**inputs)
+        vision_outputs = self.model.vision_model(pixel_values=inputs["pixel_values"])
         patch_tokens = vision_outputs.last_hidden_state  # [B, L, D]
         cls_token = vision_outputs.pooler_output
-
-        # split cls token and patch tokens
-        # cls_token = hidden[:, 0]         # [B, D]
-        # patch_tokens = hidden[:, 1:]     # [B, N, D]
+        
+        
+        ### process text ###
+        inputs = self.processor(text=texts, 
+                                padding="max_length", 
+                                truncation=True,
+                                max_length=64,
+                                return_tensors="pt")
+        input_ids = inputs["input_ids"].to(device=device)
+        text_outputs  = self.model.text_model(input_ids)
+        # text_feats = text_outputs.last_hidden_state
+        # text_cls_feats = text_outputs.pooler_output
+        # print(text_feats.shape) # 64 64(max_length) 768
+        # fusion
+        text_tokens = text_outputs.last_hidden_state
+        text_tokens = text_tokens.unsqueeze(1).repeat(1, T, 1, 1).view(B * T, -1, text_tokens.shape[-1])  # [B*T, L, D]
+        for blk in self.cross_blocks:
+            patch_tokens = blk(
+                patch_tokens,
+                text_tokens,
+            )
+        ### process text ###
 
         # original cls -> projection
         cls_token = self.cls_projection(cls_token)  # [B, output_dim]
@@ -199,20 +374,20 @@ class VisionEncoder(nn.Module):
         patch_tokens_2d = patch_tokens_2d.permute(0, 3, 1, 2).contiguous()  # [B, D, H_patch, W_patch]
 
         # bottleneck -> VAE-like feature
-        vae_feature_raw = self.bottleneck(patch_tokens_2d)  # [BT, C_out, H_out, W_out]
-        vae_feature = vae_feature_raw / (vae_feature_raw.abs().max(dim=-1, keepdim=True)[0] + 1e-8)
+        vae_feature_raw = self.bottleneck(patch_tokens_2d)  # [B, C_out, H_out, W_out]
+        # print(vae_feature_raw.shape, patch_tokens_2d.shape) # torch.Size([64, 16, 28, 28]) torch.Size([64, 768, 14, 14])
+        vae_feature = self.tanh(vae_feature_raw)
+        # vae_feature = vae_feature_raw / (vae_feature_raw.abs().max(dim=-1, keepdim=True)[0] + 1e-8)
 
         # average pool -> token
         pooled_token = F.adaptive_avg_pool2d(vae_feature, output_size=1).flatten(1)  # [B, C_out]
 
         # fuse pooled token with original cls token
         final_token = self.fusion_head(cls_token, pooled_token)  # [B, output_dim]
-        
-        final_token = final_token.view(B, T, -1)  # reshape back to [B, T, output_dim]
+        # final_token = final_token / (
+        #     final_token.abs().max(dim=-1, keepdim=True)[0] + 1e-8
+        # )
         vae_feature = vae_feature.view(B, T, self.vae_channels, self.vae_h, self.vae_w)  # [B, T, C_out, H_out, W_out]
-        cls_token = cls_token.view(B, T, -1)  # [B, T, output_dim]
-        pooled_token = pooled_token.view(B, T, -1)  # [B, T, C_out]
-        patch_tokens = patch_tokens.view(B, T, N, D)
 
         return {
             "final_token": final_token,

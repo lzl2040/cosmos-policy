@@ -96,6 +96,7 @@ uv run --no-sync --extra cu128 --group libero --python 3.10 \
   dataloader_train.batch_size=$BATCH_SIZE \
   dataloader_train.dataset.data_mix=$DATA_MIX \
   dataloader_train.dataset.stage=$STAGE \
+  dataloader_train.dataset.use_proprio=False \
   dataloader_train.dataset.max_action_dim=$MAX_ACTION_DIM \
   dataloader_train.dataset.max_state_dim=$MAX_STATE_DIM \
   dataloader_train.dataset.dataset_len_one_epoch=$DATASET_LEN \

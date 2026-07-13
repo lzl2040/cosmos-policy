@@ -58,7 +58,7 @@ dependencies = [
   "mediapy>=1.2.4",
   "huggingface_hub",
   "polars",
-  "datasets==3.3.2",
+  "datasets==4.8.2",
   "jsonlines",
   "tabulate",
   "torchcodec==0.5",

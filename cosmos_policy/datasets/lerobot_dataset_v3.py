@@ -568,11 +568,11 @@ class LeRobotDataset(torch.utils.data.Dataset):
                 if self._absolute_to_relative_idx is None
                 else [self._absolute_to_relative_idx[idx] for idx in q_idx]
             )
-            values = self.hf_dataset[key]
-            if isinstance(values, list):
-                result[key] = torch.stack([values[i] for i in relative_indices])
-            else:
-                result[key] = torch.stack(values[relative_indices])
+            # print(key, relative_indices)
+            try:
+                result[key] = torch.stack(self.hf_dataset[key][relative_indices])
+            except (KeyError, TypeError, IndexError):
+                result[key] = torch.stack(self.hf_dataset[relative_indices][key])
         return result
 
     def _query_videos(self, query_timestamps: dict[str, list[float]], ep_idx: int) -> dict[str, torch.Tensor]:
@@ -604,6 +604,7 @@ class LeRobotDataset(torch.utils.data.Dataset):
             #     print(f"{video_path} has error:{e}")
             #     frames = torch.zeros((1, 3, 224, 224))
             # item[vid_key] = frames.squeeze(0)
+            print(vid_key, len(frames))
             item[vid_key] = frames
 
         return item
@@ -628,15 +629,19 @@ class LeRobotDataset(torch.utils.data.Dataset):
         ep_idx = item["episode_index"].item()
         # Use the absolute index from the dataset for delta timestamp calculations
         abs_idx = item["index"].item()
+        # print("step 1")
 
         query_indices = None
         if self.delta_indices is not None:
             query_indices, padding = self._get_query_indices(abs_idx, ep_idx)
+            # print("step 1.5")
             query_result = self._query_hf_dataset(query_indices)
+            # print("step 1.8")
             item = {**item, **padding}
             for key, val in query_result.items():
                 item[key] = val
-
+        # print("step 2")
+        
         if len(self.meta.video_keys) > 0:
             current_ts = item["timestamp"].item()
             query_timestamps = self._get_query_timestamps(current_ts, query_indices)

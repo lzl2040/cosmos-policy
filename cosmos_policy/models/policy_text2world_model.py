@@ -350,6 +350,7 @@ class CosmosPolicyDiffusionModel(BaseDiffusionModel):
                 - Tensor: The computed loss for the training step as a PyTorch Tensor.
         """
         self._update_train_stats(data_batch)
+        print(data_batch.keys())
 
         # Obtain text embeddings online
         if self.config.text_encoder_config is not None and self.config.text_encoder_config.compute_online:

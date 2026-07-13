@@ -271,6 +271,7 @@ class PolicyEvalConfig:
     max_state_dim: int = 15
     
     device: int = 0
+    max_try_num: int = 5
 
 
 # Set up logging
@@ -641,19 +642,49 @@ def run_task(
         log_message(f"Starting episode {task_episodes + 1}...", log_file)
 
         # Run episode
-        success, replay_images, replay_wrist_images, future_image_predictions_list, collected_data = run_episode(
-            cfg,
-            env,
-            task_description,
-            model,
-            planning_model,
-            dataset_stats,
-            worker_pool,
-            resize_size,
-            initial_state,
-            log_file,
-            device
-        )
+        success = False
+        try_num = 0
+        while try_num < cfg.max_try_num and not success:
+            try_num += 1
+            log_message(f"Attempt {try_num} for episode {task_episodes + 1}...", log_file)
+            success, replay_images, replay_wrist_images, future_image_predictions_list, collected_data = run_episode(
+                cfg,
+                env,
+                task_description,
+                model,
+                planning_model,
+                dataset_stats,
+                worker_pool,
+                resize_size,
+                initial_state,
+                log_file,
+                device
+            )
+            # Save episodic data (in data collection mode)
+            if cfg.data_collection and collected_data is not None:
+
+                def _save_episode_data():
+                    """Save collected episode data to HDF5 file."""
+                    ep_filename = f"episode_data--suite={cfg.task_suite_name}--{DATE_TIME}--task={task_id}--ep={total_episodes}--success={success}--{try_num}--{cfg.run_id_note}.hdf5"
+                    rollout_data_dir = os.path.join(cfg.local_log_dir, "rollout_data")
+                    os.makedirs(rollout_data_dir, exist_ok=True)
+                    ep_filepath = os.path.join(rollout_data_dir, ep_filename)
+                    with h5py.File(ep_filepath, "w") as f:
+                        for k, v in collected_data.items():
+                            if isinstance(v, np.ndarray):
+                                is_image = v.ndim == 4 and v.shape[-1] == 3 and v.dtype == np.uint8
+                                if is_image and cfg.jpeg_compress:
+                                    jpeg_list = [jpeg_encode_image(frame, quality=95) for frame in v]
+                                    dt = h5py.vlen_dtype(np.dtype("uint8"))
+                                    f.create_dataset(k + "_jpeg", data=jpeg_list, dtype=dt)
+                                else:
+                                    f.create_dataset(k, data=v)
+                            else:
+                                f.attrs[k] = v
+                        f.attrs["task_description"] = task_description
+
+                _save_episode_data()
+            
 
         # Update counters
         task_episodes += 1
@@ -696,30 +727,30 @@ def run_task(
                 show_diff=False,
             )
 
-        # Save episodic data (in data collection mode)
-        if cfg.data_collection and collected_data is not None:
+        # # Save episodic data (in data collection mode)
+        # if cfg.data_collection and collected_data is not None:
 
-            def _save_episode_data():
-                """Save collected episode data to HDF5 file."""
-                ep_filename = f"episode_data--suite={cfg.task_suite_name}--{DATE_TIME}--task={task_id}--ep={total_episodes}--success={success}--{cfg.run_id_note}.hdf5"
-                rollout_data_dir = os.path.join(cfg.local_log_dir, "rollout_data")
-                os.makedirs(rollout_data_dir, exist_ok=True)
-                ep_filepath = os.path.join(rollout_data_dir, ep_filename)
-                with h5py.File(ep_filepath, "w") as f:
-                    for k, v in collected_data.items():
-                        if isinstance(v, np.ndarray):
-                            is_image = v.ndim == 4 and v.shape[-1] == 3 and v.dtype == np.uint8
-                            if is_image and cfg.jpeg_compress:
-                                jpeg_list = [jpeg_encode_image(frame, quality=95) for frame in v]
-                                dt = h5py.vlen_dtype(np.dtype("uint8"))
-                                f.create_dataset(k + "_jpeg", data=jpeg_list, dtype=dt)
-                            else:
-                                f.create_dataset(k, data=v)
-                        else:
-                            f.attrs[k] = v
-                    f.attrs["task_description"] = task_description
+        #     def _save_episode_data():
+        #         """Save collected episode data to HDF5 file."""
+        #         ep_filename = f"episode_data--suite={cfg.task_suite_name}--{DATE_TIME}--task={task_id}--ep={total_episodes}--success={success}--{cfg.run_id_note}.hdf5"
+        #         rollout_data_dir = os.path.join(cfg.local_log_dir, "rollout_data")
+        #         os.makedirs(rollout_data_dir, exist_ok=True)
+        #         ep_filepath = os.path.join(rollout_data_dir, ep_filename)
+        #         with h5py.File(ep_filepath, "w") as f:
+        #             for k, v in collected_data.items():
+        #                 if isinstance(v, np.ndarray):
+        #                     is_image = v.ndim == 4 and v.shape[-1] == 3 and v.dtype == np.uint8
+        #                     if is_image and cfg.jpeg_compress:
+        #                         jpeg_list = [jpeg_encode_image(frame, quality=95) for frame in v]
+        #                         dt = h5py.vlen_dtype(np.dtype("uint8"))
+        #                         f.create_dataset(k + "_jpeg", data=jpeg_list, dtype=dt)
+        #                     else:
+        #                         f.create_dataset(k, data=v)
+        #                 else:
+        #                     f.attrs[k] = v
+        #             f.attrs["task_description"] = task_description
 
-            _save_episode_data()
+        #     _save_episode_data()
 
         # Log results
         log_message(f"Success: {success}", log_file)

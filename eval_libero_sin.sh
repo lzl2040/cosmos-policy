@@ -6,6 +6,8 @@ MAX_ACTION_DIM=7
 MAX_STATE_DIM=8
 ACTION_STEP=16
 NUM_THIRD_IMG=2
+DATA_COLLECTION=False
+MAX_TRY_NUM=1
 
 # 解析命令行参数
 while [[ $# -gt 0 ]]; do
@@ -39,8 +41,16 @@ while [[ $# -gt 0 ]]; do
             ACTION_STEP="$2"
             shift 2
             ;;
+        --data_collection)
+            DATA_COLLECTION="$2"
+            shift 2
+            ;;
         --num_third_img)
             NUM_THIRD_IMG="$2"
+            shift 2
+            ;;
+        --max_try_num)
+            MAX_TRY_NUM="$2"
             shift 2
             ;;
         *)
@@ -74,7 +84,7 @@ uv run --no-sync --extra cu128 --group libero --python 3.10 \
     --device 0 \
     --local_log_dir /mnt/wangxiaofa/cosmos_policy_exp/cosmos_policy/libero/logs/ \
     --randomize_seed False \
-    --data_collection False \
+    --data_collection $DATA_COLLECTION \
     --available_gpus "0,1,2,3" \
     --use_parallel_inference False \
     --seed 195 \
@@ -89,4 +99,5 @@ uv run --no-sync --extra cu128 --group libero --python 3.10 \
     --num_denoising_steps_future_state 1 \
     --num_denoising_steps_value 1 \
     --max_action_dim $MAX_ACTION_DIM \
-    --max_state_dim $MAX_STATE_DIM
+    --max_state_dim $MAX_STATE_DIM \
+    --max_try_num $MAX_TRY_NUM

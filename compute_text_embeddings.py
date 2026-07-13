@@ -7,6 +7,7 @@ import numpy as np
 import pickle
 from tqdm import tqdm
 from cosmos_policy.datasets.lerobot.mixtures import OXE_NAMED_MIXTURES
+import pandas as pd
 # cosmos-predict-2
 def encode_t5_text_embeddings(t5_model, t5_tokenizer, prompts, max_length, device):
     if isinstance(prompts, str):

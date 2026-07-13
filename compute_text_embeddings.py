@@ -80,11 +80,19 @@ if text_model_type == "t5":
             print(f"[Skip] path not exist: {data_path}")
             continue
         task_path = os.path.join(data_path, "meta", "tasks.jsonl")
+        task_parquet_path = os.path.join(data_path, "meta", "tasks.parquet")
+
         tasks = []
-        with open(task_path, "r") as f:
-            for line in f:
-                d_dict = json.loads(line)
-                tasks.append((d_dict["task_index"], d_dict["task"]))
+        if os.path.exists(task_path):
+            with open(task_path, "r") as f:
+                for line in f:
+                    d_dict = json.loads(line)
+                    tasks.append((d_dict["task_index"], d_dict["task"]))
+        else:
+            df = pd.read_parquet(task_parquet_path)
+            for task_desc, row in df.iterrows():
+                task_index = row['task_index']
+                tasks.append((task_index, task_desc))
         task_chunk_len = math.ceil(len(tasks) / max_task_chunk)
         chunk_id = 0
         while chunk_id < task_chunk_len:

@@ -1228,6 +1228,7 @@ def get_action(
             ),
             # "value_latent_idx": torch.tensor([value_latent_idx] * batch_size, dtype=torch.int64).cuda(),
              "value_latent_idx": torch.tensor([value_latent_idx] * batch_size, dtype=torch.int64).to(device),
+             "task": task_label_or_embedding,
         }
 
         # Generate the output latent sequence - contains the predicted action chunk, future state, and value, but

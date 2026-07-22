@@ -486,7 +486,25 @@ class CosmosPolicyDiffusionModel(BaseDiffusionModel):
         with torch.no_grad():
             action_embeddings = self.ace.action_encoder(action_chunk, sample_rate)  # [B, chunk_size // group_size, hidden_dim]
         
-        # action_embeddings = self.action_proj(action_embeddings)  # [B, chunk_size // group_size, hidden_dim_dit]
+        if torch.all(current_proprio_indices != -1):  # -1 indicates proprio is not used
+            # 6 16 32
+            # print(action_chunk.shape, proprio.shape)
+            cur_state_embeddings = self.ace.action_encoder(proprio, sample_rate)
+            x0_B_C_T_H_W = replace_latent_with_action_chunk(
+                x0_B_C_T_H_W,
+                cur_state_embeddings,
+                action_indices=current_proprio_indices,
+            )
+            # print(x0_B_C_T_H_W.shape) # B 16 9 28 28
+        
+        if torch.all(future_proprio_indices != -1):  # -1 indicates proprio is not used
+            fur_state_embeddings = self.ace.action_encoder(future_proprio, sample_rate)
+            x0_B_C_T_H_W = replace_latent_with_action_chunk(
+                x0_B_C_T_H_W,
+                fur_state_embeddings,
+                action_indices=future_proprio_indices,
+            )
+        
         
         # Action
         x0_B_C_T_H_W = replace_latent_with_action_chunk(
@@ -540,8 +558,18 @@ class CosmosPolicyDiffusionModel(BaseDiffusionModel):
         
         # kendall_loss_action_mse_loss = torch.tensor(0.0, device=x0_B_C_T_H_W.device)
         # kendall_loss_action_l1_loss = torch.tensor(0.0, device=x0_B_C_T_H_W.device)
-        kendall_loss_state_mse_loss = torch.tensor(0.0, device=x0_B_C_T_H_W.device)
-        kendall_loss_state_l1_loss = torch.tensor(0.0, device=x0_B_C_T_H_W.device)
+        if torch.all(future_proprio_indices != -1):
+            # decode state
+            state_shape = cur_state_embeddings.shape[1:]
+            pred_state_embeds = extract_action_chunk_from_latent_sequence(model_pred.x0, state_shape, future_proprio_indices)
+            pred_state_embeds = pred_state_embeds.to(dtype=action_embeddings.dtype)
+            pred_state = self.ace.action_encoder.decode_states(pred_state_embeds)  # [B, chunk_size, action_dim]
+            
+            kendall_loss_state_mse_loss = ((pred_state - future_proprio) ** 2).mean()
+            kendall_loss_state_l1_loss = torch.abs(pred_state - future_proprio).mean()
+        else:
+            kendall_loss_state_mse_loss = torch.tensor(0.0, device=x0_B_C_T_H_W.device)
+            kendall_loss_state_l1_loss = torch.tensor(0.0, device=x0_B_C_T_H_W.device)
 
         # Get losses for future third-person image prediction
         if torch.all(future_image_indices != -1):  # -1 indicates future third-person image is not used

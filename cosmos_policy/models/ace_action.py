@@ -577,6 +577,7 @@ class ActionChunkEncoder(nn.Module):
 
         # Reconstruction decoder
         self.action_decoder = ActionReconstructionHead(config)
+        self.state_decoder = ActionReconstructionHead(config)
 
     def _pad_actions(self, actions: torch.Tensor) -> torch.Tensor:
         current_dim = actions.shape[-1]
@@ -676,6 +677,31 @@ class ActionChunkEncoder(nn.Module):
         )
 
         return reconstructed_actions
+    
+
+    def decode_states(self, state_tokens: torch.Tensor) -> torch.Tensor:
+        batch_size = state_tokens.shape[0]
+
+        reconstructed_groups = self.state_decoder(
+            action_tokens=state_tokens,
+            global_embedding=None,
+            attention_mask=None,
+        )
+
+        reconstructed_states = reconstructed_groups.view(
+            batch_size,
+            self.num_groups,
+            self.group_size,
+            self.action_dim_padded,
+        )
+
+        reconstructed_states = reconstructed_states.reshape(
+            batch_size,
+            self.chunk_size,
+            self.action_dim_padded,
+        )
+
+        return reconstructed_states
     
     def forward(
         self,

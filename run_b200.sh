@@ -9,6 +9,7 @@ DATASET_LEN=5000_0000
 ACC_STEP=2
 PARENT_DIR="/mnt/wangxiaofa/robot_dataset/lerobot-format"
 DCP_PT_PATH=""
+USE_STATE=False
 
 # 解析命令行参数
 while [[ $# -gt 0 ]]; do
@@ -35,6 +36,10 @@ while [[ $# -gt 0 ]]; do
             ;;
         --job_name)
             JOB_NAME="$2"
+            shift 2
+            ;;
+        --use_state)
+            USE_STATE="$2"
             shift 2
             ;;
         --batch_size)
@@ -96,7 +101,7 @@ uv run --no-sync --extra cu128 --group libero --python 3.10 \
   dataloader_train.batch_size=$BATCH_SIZE \
   dataloader_train.dataset.data_mix=$DATA_MIX \
   dataloader_train.dataset.stage=$STAGE \
-  dataloader_train.dataset.use_proprio=False \
+  dataloader_train.dataset.use_proprio=$USE_STATE \
   dataloader_train.dataset.max_action_dim=$MAX_ACTION_DIM \
   dataloader_train.dataset.max_state_dim=$MAX_STATE_DIM \
   dataloader_train.dataset.dataset_len_one_epoch=$DATASET_LEN \

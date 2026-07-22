@@ -1723,6 +1723,11 @@ class MultiDatasetforDistTraining(torch.utils.data.Dataset):
         IMAGE_WRIST = "observation.images.wrist"
         CURRENT_IDX = 0
         FUTURE_IDX = -1
+        T = item[OBS_ROBOT].shape[0]
+        # Get proprio values for sample_dict (even though they're not used as latent placeholders)
+        proprio = item[OBS_ROBOT][CURRENT_IDX] if self.use_proprio else torch.zeros(self.max_state_dim)
+        future_proprio = item[OBS_ROBOT][FUTURE_IDX] if self.use_proprio else torch.zeros(self.max_state_dim)
+        
         # first_input_image = np.expand_dims(np.zeros_like(item[IMAGE_PRIMARY][CURRENT_IDX]), axis=0)
         # image_list.append(first_input_image)
         # current_sequence_idx += 1
@@ -1731,8 +1736,11 @@ class MultiDatasetforDistTraining(torch.utils.data.Dataset):
         # proprio values are removed from the latent sequence
         current_proprio_latent_idx = -1
         # current state
+        # print(self.use_proprio)
         if self.use_proprio:
             proprio = item[OBS_ROBOT][CURRENT_IDX]
+            proprio = proprio.unsqueeze(0).repeat(T, 1)
+            # print(item[OBS_ROBOT].shape) # 16 32
             # Proprio values will be injected into latent diffusion sequence later
             # For now just add blank image
             blank_image = np.zeros_like(item[IMAGE_PRIMARY][CURRENT_IDX])
@@ -1775,16 +1783,13 @@ class MultiDatasetforDistTraining(torch.utils.data.Dataset):
         action_latent_idx = current_sequence_idx
         current_sequence_idx += 1
         
-        # NOTE: future_proprio is no longer used as prediction target
-        # Get proprio values for sample_dict (even though they're not used as latent placeholders)
-        proprio = item[OBS_ROBOT][CURRENT_IDX] if self.use_proprio else torch.zeros(self.max_state_dim)
-        future_proprio = item[OBS_ROBOT][FUTURE_IDX] if self.use_proprio else torch.zeros(self.max_state_dim)
-
+        
         # future state
         future_proprio_latent_idx = -1
         # Add future proprio
         if self.use_proprio:
             future_proprio = item[OBS_ROBOT][FUTURE_IDX]
+            future_proprio = future_proprio.unsqueeze(0).repeat(T, 1)
             # Not using proprio image; proprio values will be injected into latent diffusion sequence later
             # For now just add blank image
             blank_image = np.zeros_like(item[IMAGE_PRIMARY][FUTURE_IDX])

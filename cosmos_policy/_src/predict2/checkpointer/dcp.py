@@ -674,8 +674,8 @@ class DistributedCheckpointer(AbstractCheckpointer):
                 #     )
                 #     grad_scaler.load_state_dict(_state_dict["grad_scaler"])
                 #     iteration = _state_dict["iteration"]
-                else:
-                    raise ValueError(f"Invalid key: {key}. not support to resume.")
+                # else:
+                #     raise ValueError(f"Invalid key: {key}. not support to resume.")
             if self.callbacks is not None:
                 self.callbacks.on_load_checkpoint(model, state_dict=_state_dict)
             log.critical(f"Loaded checkpoint from {checkpoint_path} in iteration {iteration}")

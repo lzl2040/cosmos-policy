@@ -642,38 +642,38 @@ class DistributedCheckpointer(AbstractCheckpointer):
 
                     dcp_load_state_dict(_state_dict, storage_reader, load_planner)
                     _model_wrapper.load_state_dict(_state_dict)
-                elif key == "optim":
-                    log.info("- Loading the optimizer...")
-                    _optim_wrapper = OptimizerWrapper(model, optimizer)
-                    _state_dict = _optim_wrapper.state_dict()
-                    dcp.load(
-                        _state_dict,
-                        storage_reader=storage_reader,
-                        planner=load_planner,
-                    )
-                    _optim_wrapper.load_state_dict(_state_dict)
-                elif key == "scheduler":
-                    log.info("- Loading the scheduler...")
-                    _state_dict = scheduler.state_dict()
-                    dcp.load(
-                        _state_dict,
-                        storage_reader=storage_reader,
-                        planner=load_planner,
-                    )
-                    scheduler.load_state_dict(_state_dict)
-                elif key == "trainer":
-                    log.info("- Loading the trainer...")
-                    _state_dict = {
-                        "grad_scaler": grad_scaler.state_dict(),
-                        "iteration": iteration,
-                    }
-                    dcp.load(
-                        _state_dict,
-                        storage_reader=storage_reader,
-                        planner=load_planner,
-                    )
-                    grad_scaler.load_state_dict(_state_dict["grad_scaler"])
-                    iteration = _state_dict["iteration"]
+                # elif key == "optim":
+                #     log.info("- Loading the optimizer...")
+                #     _optim_wrapper = OptimizerWrapper(model, optimizer)
+                #     _state_dict = _optim_wrapper.state_dict()
+                #     dcp.load(
+                #         _state_dict,
+                #         storage_reader=storage_reader,
+                #         planner=load_planner,
+                #     )
+                #     _optim_wrapper.load_state_dict(_state_dict)
+                # elif key == "scheduler":
+                #     log.info("- Loading the scheduler...")
+                #     _state_dict = scheduler.state_dict()
+                #     dcp.load(
+                #         _state_dict,
+                #         storage_reader=storage_reader,
+                #         planner=load_planner,
+                #     )
+                #     scheduler.load_state_dict(_state_dict)
+                # elif key == "trainer":
+                #     log.info("- Loading the trainer...")
+                #     _state_dict = {
+                #         "grad_scaler": grad_scaler.state_dict(),
+                #         "iteration": iteration,
+                #     }
+                #     dcp.load(
+                #         _state_dict,
+                #         storage_reader=storage_reader,
+                #         planner=load_planner,
+                #     )
+                #     grad_scaler.load_state_dict(_state_dict["grad_scaler"])
+                #     iteration = _state_dict["iteration"]
                 else:
                     raise ValueError(f"Invalid key: {key}. not support to resume.")
             if self.callbacks is not None:

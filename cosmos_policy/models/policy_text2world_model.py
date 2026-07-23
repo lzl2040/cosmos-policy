@@ -519,6 +519,13 @@ class CosmosPolicyDiffusionModel(BaseDiffusionModel):
         condition.gt_frames = replace_latent_with_action_chunk(
             condition.gt_frames, action_embeddings, action_indices=action_indices
         )
+        if torch.all(current_proprio_indices != -1):
+            condition.gt_frames = replace_latent_with_action_chunk(
+                condition.gt_frames, cur_state_embeddings, action_indices=current_proprio_indices
+            )
+            condition.gt_frames = replace_latent_with_action_chunk(
+                condition.gt_frames, fur_state_embeddings, action_indices=future_proprio_indices
+            )
         
         # Get the mean and stand deviation of the marginal probability distribution.
         mean_B_C_T_H_W, std_B_T = self.sde.marginal_prob(x0_B_C_T_H_W, sigma_B_T)

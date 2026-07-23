@@ -489,7 +489,8 @@ class CosmosPolicyDiffusionModel(BaseDiffusionModel):
         if torch.all(current_proprio_indices != -1):  # -1 indicates proprio is not used
             # 6 16 32
             # print(action_chunk.shape, proprio.shape)
-            cur_state_embeddings = self.ace.action_encoder(proprio, sample_rate)
+            with torch.no_grad():
+                cur_state_embeddings = self.ace.action_encoder(proprio, sample_rate)
             x0_B_C_T_H_W = replace_latent_with_action_chunk(
                 x0_B_C_T_H_W,
                 cur_state_embeddings,
@@ -498,7 +499,8 @@ class CosmosPolicyDiffusionModel(BaseDiffusionModel):
             # print(x0_B_C_T_H_W.shape) # B 16 9 28 28
         
         if torch.all(future_proprio_indices != -1):  # -1 indicates proprio is not used
-            fur_state_embeddings = self.ace.action_encoder(future_proprio, sample_rate)
+            with torch.no_grad():
+                fur_state_embeddings = self.ace.action_encoder(future_proprio, sample_rate)
             x0_B_C_T_H_W = replace_latent_with_action_chunk(
                 x0_B_C_T_H_W,
                 fur_state_embeddings,

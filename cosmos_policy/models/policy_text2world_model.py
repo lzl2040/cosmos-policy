@@ -370,7 +370,7 @@ class CosmosPolicyDiffusionModel(BaseDiffusionModel):
         x0_B_C_T_H_W, condition, epsilon_B_C_T_H_W, sigma_B_T = self.broadcast_split_for_model_parallelsim(
             x0_B_C_T_H_W, condition, epsilon_B_C_T_H_W, sigma_B_T
         )
-        output_batch, kendall_loss, _, _, kendall_loss_action_mse_loss = self.compute_loss_with_epsilon_and_sigma(
+        output_batch, kendall_loss, _, _, kendall_loss_action_mse_loss, kendall_loss_state_mse_loss = self.compute_loss_with_epsilon_and_sigma(
             x0_B_C_T_H_W,
             condition,
             epsilon_B_C_T_H_W,
@@ -406,7 +406,7 @@ class CosmosPolicyDiffusionModel(BaseDiffusionModel):
         else:
             raise ValueError(f"Invalid loss_reduce: {self.loss_reduce}")
 
-        return output_batch, kendall_loss + 5 * kendall_loss_action_mse_loss
+        return output_batch, kendall_loss + 5 * kendall_loss_action_mse_loss + 5 * kendall_loss_state_mse_loss
 
     def compute_loss_with_epsilon_and_sigma(
         self,
@@ -731,7 +731,7 @@ class CosmosPolicyDiffusionModel(BaseDiffusionModel):
             "value_function_sample_value_mse_loss": value_function_sample_value_mse_loss,  # Main loss for value function
             "value_function_sample_value_l1_loss": value_function_sample_value_l1_loss,  # Main loss for value function
         }
-        return output_batch, kendall_loss, pred_mse_B_C_T_H_W, edm_loss_B_C_T_H_W, kendall_loss_action_mse_loss
+        return output_batch, kendall_loss, pred_mse_B_C_T_H_W, edm_loss_B_C_T_H_W, kendall_loss_action_mse_loss, kendall_loss_state_mse_loss
 
     def generate_samples_from_batch(
         self,

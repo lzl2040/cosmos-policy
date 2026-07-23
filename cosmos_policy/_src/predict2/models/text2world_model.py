@@ -194,7 +194,7 @@ class DiffusionModel(ImaginaireModel):
             print("unexpected_keys:", unexpected_keys)
             print(f"Load ace weights from:{ace_pt_path}")
         for name, param in self.ace.named_parameters():
-            if "action_decoder" in name:
+            if "action_decoder" in name or "state_decoder" in name:
                 param.requires_grad = True
             else:
                 param.requires_grad = False

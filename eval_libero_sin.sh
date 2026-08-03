@@ -6,6 +6,7 @@ MAX_ACTION_DIM=7
 MAX_STATE_DIM=8
 ACTION_STEP=16
 NUM_THIRD_IMG=2
+USE_STATE=false
 
 # 解析命令行参数
 while [[ $# -gt 0 ]]; do
@@ -39,6 +40,10 @@ while [[ $# -gt 0 ]]; do
             ACTION_STEP="$2"
             shift 2
             ;;
+        --use_state)
+            USE_STATE="$2"
+            shift 2
+            ;;
         --num_third_img)
             NUM_THIRD_IMG="$2"
             shift 2
@@ -59,7 +64,7 @@ uv run --no-sync --extra cu128 --group libero --python 3.10 \
     --ckpt_path $CKPT_PATH \
     --config_file cosmos_policy/config/config.py \
     --use_wrist_image True \
-    --use_proprio True \
+    --use_proprio $USE_STATE \
     --use_third_person_image True \
     --num_third_person_images $NUM_THIRD_IMG \
     --normalize_proprio True \

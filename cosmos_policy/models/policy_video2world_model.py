@@ -627,7 +627,7 @@ class CosmosPolicyVideo2WorldModel(CosmosPolicyDiffusionModel):
             num_conditional_frames = data_batch[NUM_CONDITIONAL_FRAMES_KEY]
         else:
             num_conditional_frames = 1
-
+        print(f"condition frame: {num_conditional_frames}")
         if is_negative_prompt:
             condition, uncondition = self.conditioner.get_condition_with_negative_prompt(data_batch)
         else:
@@ -646,6 +646,25 @@ class CosmosPolicyVideo2WorldModel(CosmosPolicyDiffusionModel):
             _, x0, _ = self.get_data_and_condition(data_batch)
         # override condition with inference mode; num_conditional_frames used Here!
         # first use num_conditional_frames, then conditional_frames_probs, final min_num_conditional_frames
+        cur_state_embeddings = None
+        # print(x0.shape) # 1 16 9 288 288
+        if "proprio" in data_batch and torch.all(
+            data_batch["current_proprio_latent_idx"] != -1
+        ):  # -1 indicates proprio is not used
+            proprio = data_batch["proprio"]
+            sample_rate = data_batch["sample_rate"]
+            current_proprio_latent_idx = data_batch["current_proprio_latent_idx"]
+            # use action encoder
+            # print(f"state idx:{current_proprio_latent_idx}")
+            with torch.no_grad():
+                cur_state_embeddings = self.ace.action_encoder(proprio, sample_rate)
+            
+            x0 = replace_latent_with_action_chunk(
+                x0,
+                cur_state_embeddings,
+                action_indices=current_proprio_latent_idx,
+            )
+            
         condition = condition.set_video_condition(
             gt_frames=x0,
             random_min_num_conditional_frames=self.config.min_num_conditional_frames,
@@ -679,13 +698,18 @@ class CosmosPolicyVideo2WorldModel(CosmosPolicyDiffusionModel):
             data_batch["current_proprio_latent_idx"] != -1
         ):  # -1 indicates proprio is not used
             proprio = data_batch["proprio"]
+            sample_rate = data_batch["sample_rate"]
             current_proprio_latent_idx = data_batch["current_proprio_latent_idx"]
             batch_indices = torch.arange(B, device=proprio.device)
             condition.condition_video_input_mask_B_C_T_H_W[batch_indices, :, current_proprio_latent_idx, :, :] = 1
             # Additionally, add the proprio to the gt_frames so that the proprio is added in later based on the mask
-            condition.gt_frames = replace_latent_with_proprio(
-                condition.gt_frames, proprio, proprio_indices=current_proprio_latent_idx
+            # condition.gt_frames = replace_latent_with_proprio(
+            #     condition.gt_frames, proprio, proprio_indices=current_proprio_latent_idx
+            # )
+            condition.gt_frames = replace_latent_with_action_chunk(
+                condition.gt_frames, cur_state_embeddings, action_indices=current_proprio_latent_idx
             )
+            
 
         if (
             "mask_current_state_action_for_value_prediction" in data_batch

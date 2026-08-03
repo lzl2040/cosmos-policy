@@ -108,6 +108,16 @@ def ort6d_to_euler(ort6d, seq='xyz', degrees=False):
         return euler[0]
     return euler
 
+def euler_to_ort6d(euler: np.ndarray) -> np.ndarray:
+    """Convert quaternion to ort6d in batch."""
+    rot_mat = Rotation.from_euler("xyz", euler).as_matrix()
+    return rot_mat[..., :2].reshape(*rot_mat.shape[:-2], 6)
+
+def quat_to_ort6d(quat: np.ndarray) -> np.ndarray:
+    """Convert quaternion to ort6d in batch."""
+    rot_mat = Rotation.from_quat(quat).as_matrix()
+    return rot_mat[..., :2].reshape(*rot_mat.shape[:-2], 6)
+
 def get_latent_indices_from_model_config(model):
     """
     Determine latent sequence indices based on model configuration.
@@ -1053,6 +1063,16 @@ def get_action(
         proprio = None
         if cfg.use_proprio:
             proprio = obs["proprio"]
+            # convert it to ort6d
+            xyz = proprio[:3]
+            quant = proprio[3:6] # rpy
+            gripper = proprio[-1:]
+            # convert quaternion to ort6d
+            # quant_ort6d = quat_to_ort6d(quant)
+            euler_ort6d = euler_to_ort6d(quant)
+            # print(quant_ort6d.shape)
+            proprio = np.concatenate([xyz, euler_ort6d, gripper], axis=0)
+            
             # print(proprio.shape)
             org_state_dim = proprio.shape[0]
             pad_width = cfg.max_state_dim - org_state_dim
@@ -1075,6 +1095,12 @@ def get_action(
         blank_image_duplicated = duplicate_array(
             blank_image.copy(), total_num_copies=COSMOS_TEMPORAL_COMPRESSION_FACTOR
         )
+        
+        # Add blank placeholder images for robot proprioceptive state (proprio will be injected into latent later)
+        if cfg.use_proprio:
+            image_sequence.append(blank_image_duplicated)
+            current_proprio_latent_idx = current_sequence_idx
+            current_sequence_idx += 1
 
         # Add current wrist image(s)
         wrist_image, wrist_image2 = None, None
@@ -1117,6 +1143,12 @@ def get_action(
         action_latent_idx = current_sequence_idx
         current_sequence_idx += 1
         
+        # Add blank placeholder images for future proprioceptive state (future proprio will be injected into latent later)
+        if cfg.use_proprio:
+            image_sequence.append(blank_image_duplicated.copy())
+            future_proprio_latent_idx = current_sequence_idx
+            current_sequence_idx += 1
+        
         # Add placeholders for the future wrist image(s) - copies of the current wrist image(s)
         if cfg.use_wrist_image:
             image_sequence.append(wrist_image_duplicated.copy())
@@ -1157,11 +1189,13 @@ def get_action(
             proprio_tensor = (
                 torch.from_numpy(proprio).reshape(batch_size, -1).to(dtype=torch.bfloat16).to(device)
             )  # (B, proprio_dim)
+            proprio_tensor = proprio_tensor.unsqueeze(1).repeat(1, 16, 1)  # B chunk_size 1
+            # print(proprio_tensor.shape)
             # print(torch.max(proprio_tensor), torch.min(proprio_tensor))
         data_batch = {
             "sample_rate": torch.tensor(
                 [20] * batch_size, dtype=torch.bfloat16
-            ).to(device),
+            ).to(device), # libero dataset is 20
             "dataset_name": "video_data",
             "video": raw_image_sequence,  # (B, C, T, H, W)
             "t5_text_embeddings": text_embedding.repeat(batch_size, 1, 1).to(dtype=torch.bfloat16).to(device),
@@ -1172,7 +1206,7 @@ def get_action(
                 (batch_size, 1, COSMOS_IMAGE_SIZE, COSMOS_IMAGE_SIZE), dtype=torch.bfloat16
             ).to(device),  # Padding mask (assume no padding here)
             # "num_conditional_frames": model.config.min_num_conditional_frames,  # Number of latent frames used as conditioning
-            "num_conditional_frames": 3, 
+            "num_conditional_frames": 4 if cfg.use_proprio else 3,  # Number of latent frames used as conditioning
             "proprio": proprio_tensor if cfg.use_proprio else None,
             # Specify the indices of various elements in the latent diffusion sequence
             "current_proprio_latent_idx": (
@@ -1233,11 +1267,13 @@ def get_action(
 
         # Generate the output latent sequence - contains the predicted action chunk, future state, and value, but
         # the action chunk is what we care about here
+        # print([model.config.state_ch, current_sequence_idx, 28, 28])
         generated_latent_with_action, orig_clean_latent_frames = model.generate_samples_from_batch(
             data_batch,
             n_sample=batch_size,  # Generate samples
             num_steps=num_denoising_steps_action,
             seed=seed,
+            state_shape=[model.config.state_ch, current_sequence_idx, 28, 28], # Shape of the state latent frames (C', T', H', W')
             is_negative_prompt=False,  # Negative prompt is for CFG
             use_variance_scale=cfg.use_variance_scale,  # Whether to vary the magnitude of the initial noise - increases diversity slightly in generations
             return_orig_clean_latent_frames=True,  # Return the original (pre-injection) latent frames - needed for future image visualizations

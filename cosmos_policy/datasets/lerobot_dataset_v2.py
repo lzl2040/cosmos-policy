@@ -1317,6 +1317,21 @@ class MultiDatasetforDistTraining(torch.utils.data.Dataset):
             if dataset_name in vla2data_root.keys():
                 data_root = vla2data_root[dataset_name]
                 # data_root = os.path.join(parent_dir, data_root)
+                path1 = os.path.join(parent_dir, data_root)
+                path2 = os.path.join(parent_v30_dir, data_root)
+                version = "v2.1"
+                if not os.path.exists(path1) and not os.path.exists(path2):
+                    print(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] - {dataset_name} not found in {parent_dir} or {parent_v30_dir}, skipping...")
+                    continue
+                else:
+                    if os.path.exists(path1):
+                        data_root = path1
+                    else:
+                        data_root = path2
+                    json_path = os.path.join(data_root, "meta", "info.json")
+                    with open(json_path, "r") as f:
+                        info = json.load(f)
+                    version = info.get("codebase_version", "v2.1")
                 # if os.path.exists(data_root):
                 print(f"Load data from {data_root}")
                 repo_id = f"bulldog-{dataset_name}" # any
@@ -1325,8 +1340,7 @@ class MultiDatasetforDistTraining(torch.utils.data.Dataset):
                 else:
                     image_transforms = None
                 image_transforms = v2.Resize((final_image_size, final_image_size))
-                if "ms_data" not in dataset_name:
-                    data_root = os.path.join(parent_dir, data_root)
+                if version == "v2.1":
                     ds_meta = LeRobotDatasetMetadata(repo_id, root=data_root)
                     delta_timestamps = resolve_delta_timestamps(ds_meta, chunk_size)
                     dataset = LeRobotDataset(
@@ -1340,7 +1354,6 @@ class MultiDatasetforDistTraining(torch.utils.data.Dataset):
                         dataset_name=dataset_name,
                     )
                 else:
-                    data_root = os.path.join(parent_v30_dir, data_root)
                     ds_meta = LeRobotDatasetMetadataV30(repo_id, root=data_root)
                     delta_timestamps = resolve_delta_timestamps(ds_meta, chunk_size)
                     dataset = LeRobotDatasetV30(
@@ -1424,7 +1437,9 @@ class MultiDatasetforDistTraining(torch.utils.data.Dataset):
             else:
                 t5_text_embeddings_path = os.path.join(parent_dir, f"t5_embeddings_{data_mix}.pkl")
                 if not os.path.exists(t5_text_embeddings_path):
-                    t5_text_embeddings_path = os.path.join(parent_dir, "t5_embeddings", f"t5_embeddings_{data_mix}.pkl")
+                    t5_text_embeddings_path = os.path.join(parent_v30_dir, f"t5_embeddings_{data_mix}.pkl")
+                    if not os.path.exists(t5_text_embeddings_path):
+                        t5_text_embeddings_path = os.path.join(parent_dir, "t5_embeddings", f"t5_embeddings_{data_mix}.pkl")
         else:
             t5_text_embeddings_path = os.path.join(parent_dir, f"t5_embeddings_pretrain.pkl")
         if os.path.exists(t5_text_embeddings_path):

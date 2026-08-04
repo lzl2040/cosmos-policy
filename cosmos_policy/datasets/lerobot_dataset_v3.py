@@ -604,7 +604,7 @@ class LeRobotDataset(torch.utils.data.Dataset):
             #     print(f"{video_path} has error:{e}")
             #     frames = torch.zeros((1, 3, 224, 224))
             # item[vid_key] = frames.squeeze(0)
-            print(vid_key, len(frames))
+            # print(vid_key, len(frames))
             item[vid_key] = frames
 
         return item

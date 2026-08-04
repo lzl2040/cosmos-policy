@@ -1434,6 +1434,10 @@ class MultiDatasetforDistTraining(torch.utils.data.Dataset):
                 t5_text_embeddings_path = os.path.join(parent_dir, f"t5_embeddings_real_world.pkl")
                 if not os.path.exists(t5_text_embeddings_path):
                     t5_text_embeddings_path = os.path.join(parent_dir, "t5_embeddings", f"t5_embeddings_real_world.pkl")
+            elif "libero" in data_mix:
+                t5_text_embeddings_path = os.path.join(parent_dir, f"t5_embeddings_libero.pkl")
+                if not os.path.exists(t5_text_embeddings_path):
+                    t5_text_embeddings_path = os.path.join(parent_dir, "t5_embeddings", f"t5_embeddings_libero.pkl")
             else:
                 t5_text_embeddings_path = os.path.join(parent_dir, f"t5_embeddings_{data_mix}.pkl")
                 if not os.path.exists(t5_text_embeddings_path):

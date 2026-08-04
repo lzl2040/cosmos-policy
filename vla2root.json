@@ -32,6 +32,12 @@
     "libero_spatial_no_noops": "libero_spatial_no_noops_lerobot",
     "libero_object_no_noops": "libero_object_no_noops_lerobot",
     "libero_10_no_noops" : "libero_10_no_noops_lerobot",
+
+    "libero_goal_roll_success": "libero_goal_rollout_success_ort6d",
+    "libero_object_roll_success": "libero_object_rollout_success_ort6d",
+    "libero_spatial_roll_success": "libero_spatial_rollout_success_ort6d",
+    "libero_10_roll_success" : "libero_10_rollout_success_ort6d",
+    
     "simpler_fractal" : "simpler_fractal",
     "simpler_fractal_sub1" : "simpler_fractal_sub1",
     "simpler_fractal_sub2" : "simpler_fractal_sub2",

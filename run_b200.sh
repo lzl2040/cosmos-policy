@@ -8,6 +8,7 @@ MAX_STATE_dIM=32
 DATASET_LEN=5000_0000
 ACC_STEP=2
 PARENT_DIR="/mnt/wangxiaofa/robot_dataset/lerobot-format"
+PARENT_V30_DIR="/mnt/wangxiaofa/robot_dataset/lerobot-format-v30"
 DCP_PT_PATH=""
 USE_STATE=False
 CONDITION_FRAMES=4
@@ -75,6 +76,10 @@ while [[ $# -gt 0 ]]; do
             PARENT_DIR="$2"
             shift 2
             ;;
+        --parent_v30_dir)
+            PARENT_V30_DIR="$2"
+            shift 2
+            ;;
         --dcp_pt_path)
             DCP_PT_PATH="$2"
             shift 2
@@ -112,4 +117,5 @@ uv run --no-sync --extra cu128 --group libero --python 3.10 \
   dataloader_train.dataset.max_action_dim=$MAX_ACTION_DIM \
   dataloader_train.dataset.max_state_dim=$MAX_STATE_DIM \
   dataloader_train.dataset.dataset_len_one_epoch=$DATASET_LEN \
-  dataloader_train.dataset.parent_dir=$PARENT_DIR
+  dataloader_train.dataset.parent_dir=$PARENT_DIR \
+  dataloader_train.dataset.parent_v30_dir=$PARENT_V30_DIR

@@ -15,6 +15,9 @@ PARENT_V30_DIR="/mnt/wangxiaofa/robot_dataset/lerobot-format-v30"
 DCP_PT_PATH=""
 USE_STATE=False
 CONDITION_FRAMES=4
+LR=1e-4
+CYCLE_LENGTHS='[30000,100000000000000]'
+WARM_UP_STEPS='[1000,0]'
 
 # 解析命令行参数
 while [[ $# -gt 0 ]]; do
@@ -71,6 +74,18 @@ while [[ $# -gt 0 ]]; do
             CONDITION_FRAMES="$2"
             shift 2
             ;;
+        --lr)
+            LR="$2"
+            shift 2
+            ;;
+        --cycle_lengths)
+            CYCLE_LENGTHS="$2"
+            shift 2
+            ;;
+        --warm_up_steps)
+            WARM_UP_STEPS="$2"
+            shift 2
+            ;;
         --dataset_len)
             DATASET_LEN="$2"
             shift 2
@@ -121,4 +136,7 @@ uv run --no-sync --extra cu128 --group libero --python 3.10 \
   dataloader_train.dataset.max_state_dim=$MAX_STATE_DIM \
   dataloader_train.dataset.dataset_len_one_epoch=$DATASET_LEN \
   dataloader_train.dataset.parent_dir=$PARENT_DIR \
-  dataloader_train.dataset.parent_v30_dir=$PARENT_V30_DIR
+  dataloader_train.dataset.parent_v30_dir=$PARENT_V30_DIR \
+  optimizer.lr=$LR \
+  scheduler.cycle_lengths=$CYCLE_LENGTHS \
+  scheduler.warm_up_steps=$WARM_UP_STEPS

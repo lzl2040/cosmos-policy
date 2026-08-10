@@ -18,6 +18,7 @@ CONDITION_FRAMES=4
 LR=1e-4
 CYCLE_LENGTHS='[30000,100000000000000]'
 WARM_UP_STEPS='[1000,0]'
+SAVE_STEP=1000
 
 # 解析命令行参数
 while [[ $# -gt 0 ]]; do
@@ -86,6 +87,10 @@ while [[ $# -gt 0 ]]; do
             WARM_UP_STEPS="$2"
             shift 2
             ;;
+        --save_step)
+            SAVE_STEP="$2"
+            shift 2
+            ;;
         --dataset_len)
             DATASET_LEN="$2"
             shift 2
@@ -139,4 +144,5 @@ uv run --no-sync --extra cu128 --group libero --python 3.10 \
   dataloader_train.dataset.parent_v30_dir=$PARENT_V30_DIR \
   optimizer.lr=$LR \
   scheduler.cycle_lengths=$CYCLE_LENGTHS \
-  scheduler.warm_up_steps=$WARM_UP_STEPS
+  scheduler.warm_up_steps=$WARM_UP_STEPS \
+  checkpoint.save_iter=$SAVE_STEP \

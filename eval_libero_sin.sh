@@ -94,4 +94,6 @@ uv run --no-sync --extra cu128 --group libero --python 3.10 \
     --num_denoising_steps_future_state 1 \
     --num_denoising_steps_value 1 \
     --max_action_dim $MAX_ACTION_DIM \
-    --max_state_dim $MAX_STATE_DIM
+    --max_state_dim $MAX_STATE_DIM \
+    --deterministic_reset True \
+    --deterministic_reset_seed 0
